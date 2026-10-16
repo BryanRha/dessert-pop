@@ -213,14 +213,17 @@ export class GameScene extends Phaser.Scene {
     });
     // 점수 바
     // 물결 아래 상태 패널: [레벨 | 점수 + 별 게이지] 를 하나로 묶는다
-    const PY = 336;
+    // 상단 물결(≈y272)과 보드 테두리 위쪽 사이 빈 공간의 한가운데에 둔다
+    const PY = Math.max(336, Math.round((272 + (this.oy - 24 * this.k)) / 2));
     this.add.nineslice(W / 2, PY, 'hud_goal_box', null, 900, 124, 40, 40, 40, 40).setDepth(20);
     this.add.text(170, PY - 22, t('level'), { ...TXT.dark, fontSize: '26px' }).setOrigin(0.5).setDepth(21);
     this.add.text(170, PY + 18, `${this.levelId}`, { ...TXT.dark, fontSize: '48px' }).setOrigin(0.5).setDepth(21);
     const div = this.add.graphics().setDepth(21);
     div.lineStyle(4, 0xC98A5E, 0.6).lineBetween(250, PY - 40, 250, PY + 40);
-    this.add.text(285, PY - 26, t('score'), { ...TXT.dark, fontSize: '26px' }).setOrigin(0, 0.5).setDepth(21);
-    this.scoreText = this.add.bitmapText(352, PY - 26, 'font_num_gold', '0', 40).setOrigin(0, 0.5).setDepth(22);
+    // "점수 1,234" 는 게이지 위 가운데 (점수가 늘어나도 가운데 유지 → layoutScore)
+    this.scoreLabel = this.add.text(0, PY - 26, t('score'), { ...TXT.dark, fontSize: '26px' }).setOrigin(0, 0.5).setDepth(21);
+    this.scoreText = this.add.bitmapText(0, PY - 26, 'font_num_gold', '0', 40).setOrigin(0, 0.5).setDepth(22);
+    this.scoreCenterX = 285 + 670 / 2;
     // 별 게이지: 별은 같은 간격(STAR_POS)에 두고, 게이지는 별 사이 구간별로 차오른다
     const BX = 285, BWID = 670, BAR_Y = PY + 22;
     this.add.image(BX + BWID / 2, BAR_Y, 'hud_score_bar_bg').setDisplaySize(BWID, 40).setDepth(21);
@@ -234,6 +237,12 @@ export class GameScene extends Phaser.Scene {
       return { off, on, th };
     });
     this.updateHUD({ score: s.score, moves: s.moves, goals: s.goals.map(g => g.progress) });
+  }
+
+  layoutScore() {
+    const gap = 12, w = this.scoreLabel.width + gap + this.scoreText.width;
+    this.scoreLabel.x = this.scoreCenterX - w / 2;
+    this.scoreText.x = this.scoreLabel.x + this.scoreLabel.width + gap;
   }
 
   goalIcon(g) {
@@ -257,6 +266,7 @@ export class GameScene extends Phaser.Scene {
     if (snap.moves !== undefined) this.movesText.setText(`${Math.max(0, snap.moves)}`);
     if (snap.score !== undefined) {
       this.scoreText.setText(snap.score.toLocaleString('en-US'));
+      this.layoutScore();
       const ratio = starProgress(snap.score, s.stars);
       this.tweens.addCounter({ from: this.fillRatio || 0, to: ratio, duration: 250, onUpdate: tw => { this.fillRatio = tw.getValue(); this.scoreFill.setCrop(0, 0, this.scoreFillW * this.fillRatio, this.scoreFill.height); } });
       for (const st of this.scoreStars) {
