@@ -304,7 +304,8 @@ export class Engine {
     const has = x => sp.includes(x);
     if (sp[0] === 'rainbow' && sp[1] === 'rainbow') {
       const all = []; this.each((cl, y, x) => all.push([y, x]));
-      waves.push({ cells: all, fx: 'rainbowAll', at, skip: clearPieces });
+      // 진주 + 진주: 보드 전체를 두 번 타격 → 덮개 속 블록·2단 기름띠까지 모두 터짐 (장애물은 2번 맞음)
+      waves.push({ cells: all, fx: 'rainbowAll', at, skip: clearPieces, double: true });
     } else if (has('rainbow')) {
       const rb = sp[0] === 'rainbow' ? P : Q, ot = rb === P ? Q : P;
       const color = ot.c;
@@ -382,6 +383,12 @@ export class Engine {
             if (act) next.push(act);
           }
           hits.push(this.hitCell(r, c, 'blast'));
+          if (wv.double) {
+            // 두 번째 타격: 첫 타격에 덮개만 깨졌거나 기름띠가 남은 칸 (방금 발동한 특수 블록 칸은 제외)
+            const c2 = this.cell(r, c);
+            if (c2 && (c2.cover || c2.jelly > 0 || (c2.p && c2.p.k !== 'drop' && !(c2.p.k === 'tile' && c2.p.sp && activated.has(c2.p.id)))))
+              hits.push(this.hitCell(r, c, 'blast'));
+          }
         }
       }
       // 조합에 쓰인 조각(used) 제거

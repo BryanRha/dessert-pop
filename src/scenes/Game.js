@@ -581,7 +581,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   async animBlast(st) {
-    let big = false;
+    let big = false, ripple = null;
     for (const f of st.fx) {
       const at = f.at ? this.xy(...f.at) : { x: W / 2, y: H / 2 };
       const bw = this.engine.s.w * CELL, bh = this.engine.s.h * CELL;
@@ -594,7 +594,30 @@ export class GameScene extends Phaser.Scene {
         case 'cross': audio.play('sfx_combo_special'); lineH(f.at[0]); lineV(f.at[1]); big = true; break;
         case 'bigCross': audio.play('sfx_combo_special'); for (let d = -1; d <= 1; d++) { lineH(f.at[0] + d); lineV(f.at[1] + d); } big = true; break;
         case 'bigBomb': audio.play('sfx_combo_special'); this.fx('fx_bomb', at.x, at.y, { scale: 3.2 }); big = true; break;
-        case 'rainbow': case 'rainbowAll': {
+        case 'rainbowAll': {
+          // 진주 + 진주: 큰 진주 폭발 → 빛줄기가 모든 칸으로 → 중심에서 물결처럼 차례로 터짐 (아래 handleHits)
+          audio.play('sfx_rainbow'); audio.play('sfx_combo_special');
+          this.fx('fx_rainbow_orb', at.x, at.y, { scale: 3.4 });
+          this.cameras.main.flash(350, 255, 255, 255);
+          const ring = this.add.circle(at.x, at.y, 40, 0xffffff, 0).setStrokeStyle(18, 0xFFF6B0, 1);
+          this.fxLayer.add(ring);
+          this.tweens.add({ targets: ring, radius: Math.max(bw, bh), alpha: 0, duration: 650, ease: 'Cubic.Out', onComplete: () => ring.destroy() });
+          const hues = [0xFF5C8F, 0xFF9F1C, 0xFFD23F, 0x8CE04A, 0x3EC1F3, 0xA55CF0];
+          (f.cells || []).forEach(([r, c], i) => {
+            const p = this.xy(r, c);
+            const beam = this.add.image(at.x, at.y, 'fx_rainbow_beam').setOrigin(0, 0.5).setTint(hues[i % hues.length]);
+            beam.setDisplaySize(Phaser.Math.Distance.Between(at.x, at.y, p.x, p.y), 22);
+            beam.setRotation(Phaser.Math.Angle.Between(at.x, at.y, p.x, p.y));
+            this.fxLayer.add(beam);
+            this.tweens.add({ targets: beam, alpha: 0, duration: 480, delay: 160, onComplete: () => beam.destroy() });
+          });
+          this.bannerText(t('pearlStorm'));
+          ripple = f.at;
+          big = true;
+          await wait(this, 380 / this.speed);
+          break;
+        }
+        case 'rainbow': {
           audio.play('sfx_rainbow');
           this.fx('fx_rainbow_orb', at.x, at.y, { scale: 1.4 });
           const targets = (f.cells || []).slice(0, 40);
@@ -606,7 +629,6 @@ export class GameScene extends Phaser.Scene {
             this.fxLayer.add(beam);
             this.tweens.add({ targets: beam, alpha: 0, duration: 420, delay: 120, onComplete: () => beam.destroy() });
           }
-          if (f.fx === 'rainbowAll') { this.cameras.main.flash(300, 255, 255, 255); big = true; }
           await wait(this, 200 / this.speed);
           break;
         }
@@ -614,10 +636,29 @@ export class GameScene extends Phaser.Scene {
         default: break;
       }
     }
-    if (big) this.cameras.main.shake(180, 0.006);
+    if (big) this.cameras.main.shake(ripple ? 520 : 180, ripple ? 0.014 : 0.006);
     await wait(this, 90 / this.speed);
-    this.handleHits(st.hits);
+    if (ripple) {
+      // 중심에서 가까운 칸부터 한 고리씩 터뜨린다
+      const ring = h => Math.max(Math.abs(h.at[0] - ripple[0]), Math.abs(h.at[1] - ripple[1]));
+      const maxR = Math.max(0, ...st.hits.map(ring));
+      for (let d = 0; d <= maxR; d++) {
+        const group = st.hits.filter(h => ring(h) === d);
+        if (!group.length) continue;
+        this.handleHits(group);
+        if (d % 2 === 0) audio.play(`sfx_match_${Math.min(5, 1 + d / 2)}`, { volume: 0.5 });
+        await wait(this, 70 / this.speed);
+      }
+    } else this.handleHits(st.hits);
     await wait(this, 200 / this.speed);
+  }
+
+  // 화면 가운데 큰 글자 (진주 대폭발 등 특별한 순간)
+  bannerText(msg) {
+    const txt = this.add.text(W / 2, (BOARD_TOP + (this.boardBottom || H * 0.7)) / 2, msg, { ...TXT.title, fontSize: '96px', color: '#FFF6B0', stroke: '#6A2CB8', strokeThickness: 18 })
+      .setOrigin(0.5).setDepth(80).setScale(0.2).setAngle(-6);
+    this.tweens.add({ targets: txt, scale: 1, angle: 0, duration: 380, ease: 'Back.Out' });
+    this.tweens.add({ targets: txt, alpha: 0, y: txt.y - 80, delay: 1000, duration: 400, onComplete: () => txt.destroy() });
   }
 
   handleHits(hits) {
