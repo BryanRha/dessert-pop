@@ -1,0 +1,894 @@
+// 인게임: 엔진(core/engine.js)이 만든 steps 를 순서대로 애니메이션으로 재생한다.
+import { W, H, CELL, TXT, COLOR_HEX, COLOR_NAMES, BOOSTER_PRICE } from '../config.js';
+import { Engine } from '../core/engine.js';
+import { LEVELS } from '../core/levels.js';
+import { t } from '../i18n.js';
+import { audio } from '../audio.js';
+import { load, save, recordWin, addCoins, addBooster, spendCoins, useBooster } from '../save.js';
+import { button, iconButton, popup, toast, starsRow } from '../ui/widgets.js';
+
+const BOARD_TOP = 390;
+const wait = (scene, ms) => new Promise(res => scene.time.delayedCall(ms, res));
+const tweenP = (scene, cfg) => new Promise(res => scene.tweens.add({ ...cfg, onComplete: () => { cfg.onDone && cfg.onDone(); res(); } }));
+
+export class GameScene extends Phaser.Scene {
+  constructor() { super('Game'); }
+
+  init(data) {
+    this.levelId = data.levelId || 1;
+    this.level = LEVELS.find(l => l.id === this.levelId);
+    this.engine = new Engine(this.level, (Date.now() % 1e9) | 0);
+    this.sprites = new Map();
+    this.jellySprites = new Map();
+    this.busy = true;
+    this.selected = null;
+    this.armed = null;          // 'hammer' | 'swap'
+    this.speed = 1;
+    this.hintTimer = null;
+  }
+
+  create() {
+    const s = this.engine.s;
+    this.boardBottom = H - 270;
+    const bg = this.add.image(W / 2, H / 2, `bg_game_${this.level.world}`);
+    bg.setScale(Math.max(W / bg.width, H / bg.height));
+    // 보드 배율: 작은 보드는 화면에 맞게 키움 (최대 1.3배). 보드 레이어들은 모두 같은 변환(ox, oy, k)을 쓴다.
+    const availH = this.boardBottom - BOARD_TOP - 60;
+    this.k = Math.min(1.3, (W - 70) / (s.w * CELL), availH / (s.h * CELL));
+    this.cs = CELL * this.k;
+    this.ox = Math.round((W - s.w * this.cs) / 2);
+    this.oy = Math.round((BOARD_TOP + this.boardBottom) / 2 - (s.h * this.cs) / 2);
+    const layer = depth => this.add.container(this.ox, this.oy).setScale(this.k).setDepth(depth);
+    this.cellLayer = layer(1); this.jellyLayer = layer(2); this.frameLayer = layer(3);
+    this.pieceLayer = layer(5); this.overLayer = layer(6); this.fxLayer = layer(10);
+    this.drawBoard();
+    const maskG = this.make.graphics({}, false);
+    maskG.fillStyle(0xffffff);
+    this.engine.each((cl, r, c) => maskG.fillRect(this.ox + c * this.cs - 2, this.oy + r * this.cs - 2, this.cs + 4, this.cs + 4));
+    this.pieceLayer.setMask(maskG.createGeometryMask());
+    this.selectFx = this.add.image(0, 0, 'ovl_select').setVisible(false).setDisplaySize(CELL + 8, CELL + 8);
+    this.overLayer.add(this.selectFx);
+    this.engine.each((cl, r, c) => { if (cl.p) this.makeSprite(cl.p, r, c, cl.cover); });
+    this.buildHUD();
+    this.buildBoosters();
+    this.setupInput();
+    audio.music(this.level.world % 2 ? 'bgm_game_1' : 'bgm_game_2');
+    this.cameras.main.fadeIn(250, 255, 227, 236);
+    this.levelStartPopup();
+  }
+
+  // ═══ 보드 그리기 ═══════════════════════════════════════════
+  xy(r, c) { return { x: c * CELL + CELL / 2, y: r * CELL + CELL / 2 }; }            // 보드 레이어 내부 좌표
+  toWorld(p) { return { x: this.ox + p.x * this.k, y: this.oy + p.y * this.k }; }
+
+  drawBoard() {
+    const e = this.engine;
+    const g = this.add.graphics();
+    this.cellLayer.add(g);
+    g.fillStyle(0x7A0E2E, 0.18);
+    e.each((cl, r, c) => g.fillRect(c * CELL, r * CELL, CELL, CELL));
+    e.each((cl, r, c) => {
+      const { x, y } = this.xy(r, c);
+      this.cellLayer.add(this.add.image(x, y, (r + c) % 2 ? 'board_cell_b' : 'board_cell_a').setDisplaySize(CELL, CELL));
+      if (cl.jelly > 0) this.addJelly(r, c, cl.jelly);
+    });
+    // 테두리: 구멍/바깥과 맞닿은 변마다 직선, 바깥 모서리에는 코너 조각
+    const has = (r, c) => !!e.cell(r, c);
+    const B = 20; // 띠 두께 (1x)
+    e.each((cl, r, c) => {
+      const { x, y } = this.xy(r, c);
+      const open = { t: !has(r - 1, c), b: !has(r + 1, c), l: !has(r, c - 1), r: !has(r, c + 1) };
+      const edge = (dx, dy, ang) => this.frameLayer.add(this.add.image(x + dx, y + dy, 'board_frame_edge').setAngle(ang).setDisplaySize(CELL, CELL));
+      if (open.t) edge(0, -B, 0);
+      if (open.b) edge(0, B, 180);
+      if (open.l) edge(-B, 0, -90);
+      if (open.r) edge(B, 0, 90);
+      const corner = (dx, dy, ang) => this.frameLayer.add(this.add.image(x + dx, y + dy, 'board_frame_corner_out').setAngle(ang).setDisplaySize(CELL, CELL));
+      if (open.t && open.l) corner(-B, -B, 0);
+      if (open.t && open.r) corner(B, -B, 90);
+      if (open.b && open.r) corner(B, B, 180);
+      if (open.b && open.l) corner(-B, B, -90);
+    });
+    if (e.goal('drop')) {
+      for (const key of Object.keys(e.s.exits)) {
+        const [r, c] = key.split(',').map(Number);
+        const { x, y } = this.xy(r, c);
+        const a = this.add.image(x, y + CELL / 2 + 26, 'board_exit').setScale(0.42);
+        this.frameLayer.add(a);
+        this.tweens.add({ targets: a, y: a.y + 8, yoyo: true, repeat: -1, duration: 500 });
+      }
+    }
+  }
+
+  addJelly(r, c, n) {
+    const { x, y } = this.xy(r, c);
+    const img = this.add.image(x, y, `obs_jelly_${n}`).setDisplaySize(CELL, CELL);
+    this.jellyLayer.add(img);
+    this.jellySprites.set(`${r},${c}`, img);
+    return img;
+  }
+
+  textureFor(p) {
+    switch (p.k) {
+      case 'tile': return p.sp === 'rainbow' ? 'tile_rainbow' : `tile_${COLOR_NAMES[p.c]}${p.sp ? `_${p.sp}` : ''}`;
+      case 'stone': return `obs_stone_${Math.max(1, p.hp)}`;
+      case 'crate': return `obs_crate_${Math.max(1, p.hp)}`;
+      case 'slime': return 'obs_slime';
+      case 'timer': return 'obs_timer_bomb';
+      case 'drop': return `item_drop_${p.v}`;
+      case 'star': return 'item_collect_star';
+      default: return 'tile_red';
+    }
+  }
+  coverTexture(cv) { return cv.t === 'ice' ? `obs_ice_${Math.max(1, cv.hp)}` : cv.t === 'chain' ? 'obs_chain' : 'obs_bubble'; }
+
+  makeSprite(p, r, c, cover, from) {
+    const pos = from || this.xy(r, c);
+    const cont = this.add.container(pos.x, pos.y);
+    const img = this.add.image(0, 0, this.textureFor(p));
+    cont.add(img);
+    cont.img = img; cont.piece = { ...p };
+    if (p.k === 'timer') {
+      cont.timerText = this.add.text(0, 6, `${p.t}`, { ...TXT.mid, fontSize: '46px', color: '#5A2A3A', stroke: '#FFF6E6', strokeThickness: 6 }).setOrigin(0.5);
+      cont.add(cont.timerText);
+    }
+    if (cover) { cont.cover = this.add.image(0, 0, this.coverTexture(cover)); cont.add(cont.cover); }
+    this.pieceLayer.add(cont);
+    this.sprites.set(p.id, cont);
+    return cont;
+  }
+
+  setPieceTexture(id, p) {
+    const sp = this.sprites.get(id);
+    if (!sp) return;
+    Object.assign(sp.piece, p);
+    sp.img.setTexture(this.textureFor(sp.piece));
+  }
+
+  // 엔진 상태와 화면을 강제로 일치 (애니메이션 누락 대비 안전망)
+  syncAll() {
+    const alive = new Set();
+    this.engine.each((cl, r, c) => {
+      if (!cl.p) return;
+      alive.add(cl.p.id);
+      let sp = this.sprites.get(cl.p.id);
+      if (!sp) sp = this.makeSprite(cl.p, r, c, cl.cover);
+      const { x, y } = this.xy(r, c);
+      sp.setPosition(x, y).setScale(1).setAlpha(1).setAngle(0);
+      if (sp.img.texture.key !== this.textureFor(cl.p)) { sp.piece = { ...cl.p }; sp.img.setTexture(this.textureFor(cl.p)); }
+      if (cl.cover) {
+        if (!sp.cover) { sp.cover = this.add.image(0, 0, this.coverTexture(cl.cover)); sp.add(sp.cover); }
+        else sp.cover.setTexture(this.coverTexture(cl.cover));
+      } else if (sp.cover) { sp.cover.destroy(); sp.cover = null; }
+      if (sp.timerText) sp.timerText.setText(`${cl.p.t}`);
+    });
+    for (const [id, sp] of this.sprites) if (!alive.has(id)) { sp.destroy(); this.sprites.delete(id); }
+    this.engine.each((cl, r, c) => {
+      const key = `${r},${c}`; const js = this.jellySprites.get(key);
+      if (cl.jelly > 0) {
+        if (js) js.setTexture(`obs_jelly_${cl.jelly}`);
+        else this.addJelly(r, c, cl.jelly);
+      } else if (js) { js.destroy(); this.jellySprites.delete(key); }
+    });
+  }
+
+  // ═══ HUD ═══════════════════════════════════════════════════
+  buildHUD() {
+    const s = this.engine.s;
+    this.add.image(W / 2, 0, 'hud_topbar').setOrigin(0.5, 0).setDepth(20);
+    const mb = this.add.image(140, 140, 'hud_moves_box').setDepth(20);
+    this.movesBox = mb;
+    this.add.text(140, 66, t('moves'), { ...TXT.small, fontSize: '30px', strokeThickness: 6 }).setOrigin(0.5).setDepth(21);
+    this.movesText = this.add.bitmapText(140, 152, 'font_num_white', `${s.moves}`, 72).setOrigin(0.5).setDepth(21);
+    this.add.text(140, 268, `${t('level')} ${this.levelId}`, { ...TXT.small, fontSize: '32px' }).setOrigin(0.5).setDepth(21);
+    iconButton(this, W - 86, 92, 'ico_settings', () => this.pausePopup(), { size: 116 }).setDepth(22);
+
+    // 목표
+    this.goalViews = [];
+    const goals = s.goals;
+    const span = 600, startX = 300 + (span - goals.length * 170) / 2 + 85;
+    goals.forEach((g, i) => {
+      const x = startX + i * 170, y = 140;
+      const box = this.add.image(x, y, 'hud_goal_box').setDepth(20);
+      const icon = this.add.image(x, y - 12, this.goalIcon(g)).setDepth(21);
+      icon.setScale(g.type === 'jelly' ? 0.85 : g.type === 'score' ? 1.6 : 0.78);
+      const txt = this.add.bitmapText(x, y + 50, 'font_num_white', '', 42).setOrigin(0.5).setDepth(22);
+      const check = this.add.image(x + 48, y + 44, 'hud_goal_check').setScale(0.7).setDepth(22).setVisible(false);
+      this.goalViews.push({ g, icon, txt, check, x, y });
+    });
+    // 점수 바
+    this.add.image(W / 2, 318, 'hud_score_bar_bg').setDisplaySize(620, 52).setDepth(20);
+    this.scoreFill = this.add.image(W / 2 - 310, 318, 'hud_score_bar_fill').setOrigin(0, 0.5).setDisplaySize(620, 52).setDepth(21);
+    this.scoreFillW = this.scoreFill.width;
+    this.scoreFill.setCrop(0, 0, 0, this.scoreFill.height);
+    this.scoreStars = s.stars.map((th, i) => {
+      const x = W / 2 - 310 + 620 * Math.min(1, th / s.stars[2]) - (i === 2 ? 16 : 0);
+      const off = this.add.image(x, 318, 'hud_score_star_off').setScale(0.5).setDepth(22);
+      const on = this.add.image(x, 318, 'hud_score_star_on').setScale(0.5).setDepth(22).setVisible(false);
+      return { off, on, th };
+    });
+    this.scoreText = this.add.bitmapText(W / 2, 264, 'font_num_gold', '0', 40).setOrigin(0.5).setDepth(22);
+    this.updateHUD({ score: s.score, moves: s.moves, goals: s.goals.map(g => g.progress) });
+  }
+
+  goalIcon(g) {
+    switch (g.type) {
+      case 'score': return 'star_small_on';
+      case 'jelly': return 'obs_jelly_2';
+      case 'drop': return 'item_drop_a';
+      case 'collect': return `tile_${g.color}`;
+      case 'clear': return g.what === 'stone' ? 'obs_stone_3' : g.what === 'crate' ? 'obs_crate_2' : 'obs_slime';
+      case 'cover': {
+        let tp = 'ice'; this.engine.each(cl => { if (cl.cover) tp = cl.cover.t; });
+        return tp === 'ice' ? 'obs_ice_2' : tp === 'chain' ? 'obs_chain' : 'obs_bubble';
+      }
+      case 'star': return 'item_collect_star';
+      default: return 'star_small_on';
+    }
+  }
+
+  updateHUD(snap) {
+    const s = this.engine.s;
+    if (snap.moves !== undefined) this.movesText.setText(`${Math.max(0, snap.moves)}`);
+    if (snap.score !== undefined) {
+      this.scoreText.setText(snap.score.toLocaleString('en-US'));
+      const ratio = Math.min(1, snap.score / s.stars[2]);
+      this.tweens.addCounter({ from: this.fillRatio || 0, to: ratio, duration: 250, onUpdate: tw => { this.fillRatio = tw.getValue(); this.scoreFill.setCrop(0, 0, this.scoreFillW * this.fillRatio, this.scoreFill.height); } });
+      for (const st of this.scoreStars) {
+        if (snap.score >= st.th && !st.on.visible) { st.on.setVisible(true).setScale(0); this.tweens.add({ targets: st.on, scale: 0.55, duration: 300, ease: 'Back.Out' }); }
+      }
+    }
+    if (snap.goals) {
+      snap.goals.forEach((prog, i) => {
+        const v = this.goalViews[i]; if (!v) return;
+        const g = s.goals[i];
+        const left = g.type === 'score' ? Math.max(0, g.target - snap.score) : Math.max(0, g.target - prog);
+        const done = left <= 0;
+        v.txt.setText(done ? '' : g.type === 'score' ? `${Math.ceil(left / 1000)}k` : `${left}`);
+        if (done && !v.check.visible) { v.check.setVisible(true).setScale(0); this.tweens.add({ targets: v.check, scale: 0.7, duration: 280, ease: 'Back.Out' }); }
+        if (v.lastLeft !== undefined && left < v.lastLeft) this.tweens.add({ targets: v.icon, scale: v.icon.scale * 1.15, yoyo: true, duration: 90 });
+        v.lastLeft = left;
+      });
+    }
+  }
+
+  // ═══ 부스터 ════════════════════════════════════════════════
+  buildBoosters() {
+    this.add.image(W / 2, H, 'hud_bottombar').setOrigin(0.5, 1).setDepth(20);
+    this.boosterViews = {};
+    const list = [['hammer', 'boost_hammer'], ['shuffle', 'boost_shuffle'], ['swap', 'boost_swap']];
+    list.forEach(([k, icon], i) => {
+      const x = W / 2 + (i - 1) * 240, y = H - 110;
+      const slot = this.add.image(x, y, 'hud_booster_slot').setDepth(21).setInteractive({ useHandCursor: true });
+      const ic = this.add.image(x, y + 2, icon).setScale(0.82).setDepth(22);
+      const badge = this.add.image(x + 56, y - 52, 'hud_booster_count').setDepth(23);
+      const n = this.add.text(badge.x, badge.y - 2, '', { ...TXT.small, fontSize: '32px', strokeThickness: 6 }).setOrigin(0.5).setDepth(24);
+      const plus = this.add.image(badge.x, badge.y, 'hud_booster_add').setDepth(23);
+      slot.on('pointerup', () => { audio.play('sfx_click'); this.onBooster(k); });
+      this.boosterViews[k] = { slot, ic, badge, n, plus };
+    });
+    this.refreshBoosters();
+  }
+  refreshBoosters() {
+    const b = load().boosters;
+    for (const [k, v] of Object.entries(this.boosterViews)) {
+      const n = b[k] || 0;
+      v.n.setText(`${n}`); v.badge.setVisible(n > 0); v.n.setVisible(n > 0); v.plus.setVisible(n <= 0);
+      v.slot.setTint(this.armed === k ? 0xFFF1A8 : 0xffffff);
+      v.ic.setScale(this.armed === k ? 0.95 : 0.82);
+    }
+  }
+  onBooster(k) {
+    if (this.busy && !this.armed) return;
+    if (this.armed === k) { this.armed = null; this.refreshBoosters(); this.hideArmHint(); return; }
+    const d = load();
+    if ((d.boosters[k] || 0) <= 0) return this.buyPopup(k);
+    if (k === 'shuffle') {
+      useBooster('shuffle'); this.refreshBoosters();
+      this.busy = true;
+      audio.play('sfx_booster');
+      const res = this.engine.useShuffle();
+      this.playSteps(res.steps).then(() => this.afterTurn());
+      return;
+    }
+    this.armed = k; this.refreshBoosters();
+    this.showArmHint(t(k === 'hammer' ? 'tapTarget' : 'swapTarget'));
+  }
+  showArmHint(msg) {
+    this.hideArmHint();
+    this.armText = this.add.text(W / 2, BOARD_TOP - 24, msg, { ...TXT.small, fontSize: '34px' }).setOrigin(0.5).setDepth(30);
+    this.tweens.add({ targets: this.armText, alpha: 0.5, yoyo: true, repeat: -1, duration: 500 });
+  }
+  hideArmHint() { if (this.armText) { this.armText.destroy(); this.armText = null; } }
+  buyPopup(k, onBought) {
+    const price = BOOSTER_PRICE[k];
+    const name = t({ hammer: 'boosterHammer', shuffle: 'boosterShuffle', swap: 'boosterSwap', moves: 'boosterMoves' }[k]);
+    const p = popup(this, { title: name, width: 820, height: 760 });
+    p.box.add(this.add.image(0, -120, `boost_${k}`).setScale(1.1));
+    p.box.add(this.add.text(0, 40, t('buyBooster', name, price), TXT.body).setOrigin(0.5));
+    p.box.add(this.add.image(-60, 140, 'ico_coin').setScale(0.4));
+    p.box.add(this.add.text(-20, 140, `${load().coins}`, TXT.dark).setOrigin(0, 0.5));
+    p.box.add(button(this, 0, 270, `${t('buy')}  ${price}`, () => {
+      if (!spendCoins(price)) { toast(this, t('notEnough')); return; }
+      audio.play('sfx_coin');
+      const d = load(); d.boosters[k] = (d.boosters[k] || 0) + 1; save();
+      this.refreshBoosters(); p.close(); onBought && onBought();
+    }, { width: 440, height: 140, size: 50 }));
+  }
+
+  // ═══ 입력 ══════════════════════════════════════════════════
+  toCell(x, y) {
+    const c = Math.floor((x - this.ox) / this.cs), r = Math.floor((y - this.oy) / this.cs);
+    return this.engine.cell(r, c) ? [r, c] : null;
+  }
+  setupInput() {
+    this.input.on('pointerdown', p => {
+      if (this.busy) return;
+      const cell = this.toCell(p.x, p.y);
+      this.resetHint();
+      if (!cell) { this.select(null); return; }
+      if (this.armed === 'hammer') return this.applyHammer(cell);
+      this.drag = { cell, x: p.x, y: p.y, moved: false };
+    });
+    this.input.on('pointermove', p => {
+      if (!this.drag || this.busy || !p.isDown) return;
+      const dx = p.x - this.drag.x, dy = p.y - this.drag.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 42) return;
+      const [r, c] = this.drag.cell;
+      const target = Math.abs(dx) > Math.abs(dy) ? [r, c + Math.sign(dx)] : [r + Math.sign(dy), c];
+      this.drag.moved = true;
+      const from = this.drag.cell; this.drag = null;
+      if (this.engine.cell(...target)) this.trySwap(from, target);
+    });
+    this.input.on('pointerup', p => {
+      if (!this.drag || this.busy) { this.drag = null; return; }
+      const cell = this.drag.cell; this.drag = null;
+      if (this.selected && Math.abs(this.selected[0] - cell[0]) + Math.abs(this.selected[1] - cell[1]) === 1) this.trySwap(this.selected, cell);
+      else if (this.selected && this.selected[0] === cell[0] && this.selected[1] === cell[1]) this.select(null);
+      else this.select(cell);
+    });
+  }
+  select(cell) {
+    this.selected = cell;
+    if (!cell) { this.selectFx.setVisible(false); return; }
+    const { x, y } = this.xy(...cell);
+    this.selectFx.setPosition(x, y).setVisible(true);
+    audio.play('sfx_select');
+  }
+
+  async trySwap(a, b) {
+    this.select(null);
+    const free = this.armed === 'swap';
+    const e = this.engine;
+    if (!e.canSwap(e.cell(...a)) || !e.canSwap(e.cell(...b))) { this.shake(a); return; }
+    this.busy = true;
+    const res = e.swap(a, b, { free });
+    if (!res.ok) {
+      audio.play('sfx_swap_invalid');
+      await this.animSwap(a, b, true);
+      this.busy = false; this.scheduleHint();
+      return;
+    }
+    if (free) { useBooster('swap'); this.armed = null; this.hideArmHint(); this.refreshBoosters(); audio.play('sfx_booster'); }
+    if (this.tutorialHand) { this.tutorialHand.destroy(); this.tutorialHand = null; }
+    await this.playSteps(res.steps);
+    this.afterTurn();
+  }
+  async applyHammer(cell) {
+    this.busy = true; this.armed = null; this.hideArmHint();
+    useBooster('hammer'); this.refreshBoosters();
+    const res = this.engine.useHammer(...cell);
+    await this.playSteps(res.steps);
+    this.afterTurn();
+  }
+  shake(cell) {
+    const sp = this.pieceAt(cell); if (!sp) return;
+    audio.play('sfx_swap_invalid');
+    this.tweens.add({ targets: sp, x: sp.x + 10, yoyo: true, repeat: 2, duration: 50 });
+  }
+  pieceAt([r, c]) { const cl = this.engine.cell(r, c); return cl && cl.p ? this.sprites.get(cl.p.id) : null; }
+
+  // ═══ 힌트 ══════════════════════════════════════════════════
+  scheduleHint() {
+    this.resetHint();
+    this.hintTimer = this.time.delayedCall(5000, () => this.showHint());
+  }
+  resetHint() {
+    if (this.hintTimer) { this.hintTimer.remove(); this.hintTimer = null; }
+    if (this.hintTweens) { this.hintTweens.forEach(tw => tw.stop()); this.hintTweens = null; }
+    for (const sp of this.sprites.values()) sp.setAngle(0);
+  }
+  showHint() {
+    if (this.busy) return;
+    const m = this.engine.possibleMoves(1)[0];
+    if (!m) return;
+    this.hintTweens = m.map(pos => {
+      const sp = this.pieceAt(pos);
+      return sp && this.tweens.add({ targets: sp, angle: { from: -9, to: 9 }, yoyo: true, repeat: 5, duration: 120, onComplete: () => sp.setAngle(0) });
+    }).filter(Boolean);
+    this.hintTimer = this.time.delayedCall(4000, () => this.showHint());
+  }
+
+  // ═══ step 재생 ═════════════════════════════════════════════
+  async playSteps(steps) {
+    for (const st of steps) {
+      await this.playStep(st);
+      this.updateHUD(st);
+    }
+  }
+
+  async playStep(st) {
+    const sp = this.speed;
+    switch (st.type) {
+      case 'swap': audio.play('sfx_swap'); return this.animSwap(st.a, st.b, false, st.ids);
+      case 'match': return this.animMatch(st);
+      case 'blast': return this.animBlast(st);
+      case 'fall': return this.animFall(st);
+      case 'exit': {
+        audio.play('sfx_item_drop');
+        await Promise.all(st.items.map(it => {
+          const s = this.sprites.get(it.id); if (!s) return null;
+          this.sprites.delete(it.id);
+          this.sparkles(s.x, s.y, 0xFFD23F, 8);
+          return tweenP(this, { targets: s, y: s.y + 90, alpha: 0, scale: 1.3, duration: 380 / sp, onDone: () => s.destroy() });
+        }));
+        this.floatText(st.items[0] ? this.xy(...st.items[0].at) : { x: W / 2, y: H / 2 }, '+1000');
+        return;
+      }
+      case 'convert': case 'bonusConvert': {
+        if (st.type === 'convert') audio.play('sfx_rainbow');
+        for (const it of st.items) {
+          this.setPieceTexture(it.id, { sp: it.sp });
+          const s = this.sprites.get(it.id); if (!s) continue;
+          this.fx('fx_special_create', s.x, s.y, { scale: 1 });
+          if (st.type === 'bonusConvert') { audio.play('sfx_special_create'); s.setScale(0); this.tweens.add({ targets: s, scale: 1, duration: 200, ease: 'Back.Out' }); await wait(this, 70 / sp); }
+        }
+        return wait(this, 250 / sp);
+      }
+      case 'shuffle': {
+        audio.play('sfx_shuffle');
+        toast(this, t('shuffle'), (BOARD_TOP + this.boardBottom) / 2);
+        await Promise.all(st.items.map(it => {
+          const s = this.sprites.get(it.id); if (!s) return null;
+          this.setPieceTexture(it.id, { c: it.c, sp: it.sp });
+          const { x, y } = this.xy(...it.at);
+          return tweenP(this, { targets: s, x, y, duration: 420, ease: 'Cubic.InOut' });
+        }));
+        return;
+      }
+      case 'slimeSpread': {
+        const old = this.sprites.get(st.removed);
+        if (old) { old.destroy(); this.sprites.delete(st.removed); }
+        const s = this.makeSprite(st.piece, ...st.to);
+        s.setScale(0); audio.play('sfx_jelly', { rate: 0.7 });
+        return tweenP(this, { targets: s, scale: 1, duration: 300, ease: 'Back.Out' });
+      }
+      case 'timerTick': {
+        for (const it of st.items) {
+          const s = this.sprites.get(it.id); if (!s || !s.timerText) continue;
+          s.timerText.setText(`${Math.max(0, it.t)}`);
+          if (it.t <= 3) { s.timerText.setColor('#C2183A'); this.tweens.add({ targets: s, scale: 1.18, yoyo: true, duration: 140 }); }
+        }
+        return;
+      }
+      case 'timerBoom': {
+        for (const it of st.items) { const { x, y } = this.xy(...it.at); this.fx('fx_bomb', x, y, { scale: 2.2 }); }
+        audio.play('sfx_bomb'); this.cameras.main.shake(400, 0.015);
+        return wait(this, 600);
+      }
+      case 'booster': {
+        const { x, y } = this.xy(...st.at);
+        const h = this.add.image(x + 90, y - 140, 'boost_hammer').setAngle(40);
+        this.fxLayer.add(h);
+        audio.play('sfx_booster');
+        await tweenP(this, { targets: h, x: x + 30, y: y - 40, angle: -30, duration: 220, ease: 'Back.In' });
+        this.cameras.main.shake(120, 0.008);
+        this.tweens.add({ targets: h, alpha: 0, duration: 200, onComplete: () => h.destroy() });
+        return;
+      }
+      default: return;
+    }
+  }
+
+  animSwap(a, b, fail, ids) {
+    const A = this.xy(...a), B = this.xy(...b);
+    // 성공 시 엔진은 이미 바뀐 상태이므로 ids 로 찾음 (ids[0] = 원래 a 에 있던 조각)
+    const sa = ids ? this.sprites.get(ids[0]) : this.pieceAt(a);
+    const sb = ids ? this.sprites.get(ids[1]) : this.pieceAt(b);
+    const d = 150 / this.speed;
+    const ps = [];
+    if (sa) ps.push(tweenP(this, { targets: sa, x: B.x, y: B.y, duration: d, ease: 'Quad.InOut', yoyo: fail }));
+    if (sb) ps.push(tweenP(this, { targets: sb, x: A.x, y: A.y, duration: d, ease: 'Quad.InOut', yoyo: fail }));
+    return Promise.all(ps);
+  }
+
+  async animMatch(st) {
+    audio.play(`sfx_match_${Math.min(5, st.level)}`);
+    for (const c of st.created) {
+      this.setPieceTexture(c.id, { sp: c.sp });
+      const s = this.sprites.get(c.id);
+      if (s) { s.setScale(0.4); this.tweens.add({ targets: s, scale: 1, duration: 260, ease: 'Back.Out' }); this.fx('fx_special_create', s.x, s.y); }
+    }
+    if (st.created.length) audio.play('sfx_special_create');
+    this.handleHits(st.hits);
+    for (const g of st.groups) {
+      const n = g.cells.length;
+      const cx = g.cells.reduce((a, [r, c]) => a + this.xy(r, c).x, 0) / n, cy = g.cells.reduce((a, [r, c]) => a + this.xy(r, c).y, 0) / n;
+      this.floatText({ x: cx, y: cy }, `${n * 60 * st.level}`);
+    }
+    if (st.level >= 2) this.comboText(st.level);
+    await wait(this, 220 / this.speed);
+  }
+
+  async animBlast(st) {
+    let big = false;
+    for (const f of st.fx) {
+      const at = f.at ? this.xy(...f.at) : { x: W / 2, y: H / 2 };
+      const bw = this.engine.s.w * CELL, bh = this.engine.s.h * CELL;
+      const lineH = (r) => { const y = this.xy(r, 0).y; const s = this.add.sprite(bw / 2, y, 'fx_line_h').setDisplaySize(bw + 120, 130); this.fxLayer.add(s); s.play('fx_line_h'); s.once('animationcomplete', () => s.destroy()); };
+      const lineV = (c) => { const x = this.xy(0, c).x; const s = this.add.sprite(x, bh / 2, 'fx_line_v').setDisplaySize(130, bh + 120); this.fxLayer.add(s); s.play('fx_line_v'); s.once('animationcomplete', () => s.destroy()); };
+      switch (f.fx) {
+        case 'lineH': audio.play('sfx_line'); lineH(f.at[0]); break;
+        case 'lineV': audio.play('sfx_line'); lineV(f.at[1]); break;
+        case 'bomb': audio.play('sfx_bomb'); this.fx('fx_bomb', at.x, at.y, { scale: 1.9 }); big = true; break;
+        case 'cross': audio.play('sfx_combo_special'); lineH(f.at[0]); lineV(f.at[1]); big = true; break;
+        case 'bigCross': audio.play('sfx_combo_special'); for (let d = -1; d <= 1; d++) { lineH(f.at[0] + d); lineV(f.at[1] + d); } big = true; break;
+        case 'bigBomb': audio.play('sfx_combo_special'); this.fx('fx_bomb', at.x, at.y, { scale: 3.2 }); big = true; break;
+        case 'rainbow': case 'rainbowAll': {
+          audio.play('sfx_rainbow');
+          this.fx('fx_rainbow_orb', at.x, at.y, { scale: 1.4 });
+          const targets = (f.cells || []).slice(0, 40);
+          for (const [r, c] of targets) {
+            const p = this.xy(r, c);
+            const beam = this.add.image(at.x, at.y, 'fx_rainbow_beam').setOrigin(0, 0.5);
+            beam.setDisplaySize(Phaser.Math.Distance.Between(at.x, at.y, p.x, p.y), 26);
+            beam.setRotation(Phaser.Math.Angle.Between(at.x, at.y, p.x, p.y));
+            this.fxLayer.add(beam);
+            this.tweens.add({ targets: beam, alpha: 0, duration: 420, delay: 120, onComplete: () => beam.destroy() });
+          }
+          if (f.fx === 'rainbowAll') { this.cameras.main.flash(300, 255, 255, 255); big = true; }
+          await wait(this, 200 / this.speed);
+          break;
+        }
+        case 'hammer': audio.play('sfx_bomb', { volume: 0.5 }); this.fx('fx_pop', at.x, at.y, { scale: 1.6 }); break;
+        default: break;
+      }
+    }
+    if (big) this.cameras.main.shake(180, 0.006);
+    await wait(this, 90 / this.speed);
+    this.handleHits(st.hits);
+    await wait(this, 200 / this.speed);
+  }
+
+  handleHits(hits) {
+    let jelly = false, ice = false, stone = false, chain = false;
+    for (const h of hits) {
+      const { x, y } = this.xy(...h.at);
+      if (h.jelly !== undefined) {
+        jelly = true;
+        const key = `${h.at[0]},${h.at[1]}`; const js = this.jellySprites.get(key);
+        if (js) {
+          if (h.jelly <= 0) { this.jellySprites.delete(key); this.tweens.add({ targets: js, alpha: 0, scale: js.scale * 1.2, duration: 220, onComplete: () => js.destroy() }); }
+          else js.setTexture(`obs_jelly_${h.jelly}`);
+        }
+        this.fx('fx_jelly_break', x, y, { scale: 0.9 });
+      }
+      if (h.cover) {
+        const s = this.sprites.get(h.pid);
+        if (h.cover.t === 'chain') chain = true; else ice = true;
+        if (s && s.cover) {
+          if (h.cover.hp <= 0) { const cv = s.cover; s.cover = null; this.tweens.add({ targets: cv, alpha: 0, scale: 1.3, duration: 200, onComplete: () => cv.destroy() }); }
+          else s.cover.setTexture(this.coverTexture(h.cover));
+        }
+        this.fx(h.cover.t === 'bubble' ? 'fx_jelly_break' : 'fx_ice_break', x, y, { scale: 1 });
+      }
+      if (h.damaged && !h.removed) {
+        stone = true;
+        this.setPieceTexture(h.damaged, { hp: h.hp });
+        this.fx('fx_stone_crack', x, y);
+        const s = this.sprites.get(h.damaged); if (s) this.tweens.add({ targets: s, scale: 0.9, yoyo: true, duration: 80 });
+      }
+      if (h.removed) {
+        const s = this.sprites.get(h.removed);
+        this.sprites.delete(h.removed);
+        if (h.kind === 'tile') this.fx('fx_pop', x, y, { tint: h.color >= 0 ? COLOR_HEX[h.color] : 0xffffff });
+        else if (h.kind === 'stone' || h.kind === 'crate') { stone = true; this.fx('fx_stone_crack', x, y, { scale: 1.2 }); }
+        else if (h.kind === 'slime') { this.fx('fx_jelly_break', x, y, { tint: 0x8B5A3C }); jelly = true; }
+        else if (h.kind === 'timer') { this.fx('fx_bomb', x, y, { scale: 0.9 }); }
+        else if (h.kind === 'star') { audio.play('sfx_coin'); this.sparkles(x, y, 0xFFD23F, 10); }
+        if (s) {
+          if (h.kind === 'star' || (h.kind === 'tile' && this.isCollectGoal(h.color))) this.flyToGoal(s);
+          else this.tweens.add({ targets: s, scale: 1.25, alpha: 0, duration: 180, ease: 'Quad.Out', onComplete: () => s.destroy() });
+        }
+      }
+    }
+    if (jelly) audio.play('sfx_jelly');
+    if (ice) audio.play('sfx_ice');
+    if (chain) audio.play('sfx_chain');
+    if (stone) audio.play('sfx_stone');
+  }
+
+  isCollectGoal(color) { return this.engine.s.goals.some(g => g.type === 'collect' && COLOR_NAMES.indexOf(g.color) === color); }
+  flyToGoal(s) {
+    const idx = this.engine.s.goals.findIndex(g => g.type === 'star' || g.type === 'collect');
+    const v = this.goalViews[idx] || this.goalViews[0];
+    const w = this.toWorld(s);
+    this.pieceLayer.remove(s); this.add.existing(s);
+    s.setPosition(w.x, w.y).setScale(this.k).setDepth(25);
+    this.tweens.add({ targets: s, x: v.x, y: v.y, scale: 0.4, duration: 500, ease: 'Cubic.In', onComplete: () => s.destroy() });
+  }
+
+  async animFall(st) {
+    const per = 62 / this.speed;
+    const all = [];
+    for (const f of st.falls) {
+      const s = this.sprites.get(f.id); if (!s) continue;
+      const end = this.xy(...f.path[f.path.length - 1]);
+      const n = f.path.length - 1;
+      all.push(tweenP(this, { targets: s, x: end.x, y: end.y, duration: Math.max(90, n * per), ease: 'Quad.In' }).then(() => this.land(s)));
+    }
+    for (const f of st.spawns) {
+      const start = this.xy(...f.path[0]);
+      const s = this.makeSprite(f.piece, 0, 0, null, start);
+      const end = this.xy(...f.path[f.path.length - 1]);
+      const n = Math.max(1, Math.round((end.y - start.y) / CELL));
+      all.push(tweenP(this, { targets: s, x: end.x, y: end.y, duration: Math.max(90, n * per), ease: 'Quad.In' }).then(() => this.land(s)));
+    }
+    await Promise.all(all);
+  }
+  land(s) { this.tweens.add({ targets: s, scaleY: 0.9, scaleX: 1.06, yoyo: true, duration: 70 }); }
+
+  // ═══ 이펙트 도우미 ═════════════════════════════════════════
+  fx(key, x, y, { scale = 1, tint = null, angle = 0 } = {}) {
+    const s = this.add.sprite(x, y, key).setScale(scale).setAngle(angle);
+    if (tint !== null) s.setTint(tint);
+    this.fxLayer.add(s);
+    s.play(key);
+    s.once('animationcomplete', () => s.destroy());
+    return s;
+  }
+  sparkles(x, y, tint, n = 6) {
+    for (let i = 0; i < n; i++) {
+      const p = this.add.image(x, y, i % 2 ? 'ptc_spark' : 'ptc_star').setScale(0.3 + Math.random() * 0.3).setTint(tint);
+      this.fxLayer.add(p);
+      const a = Math.random() * Math.PI * 2, d = 60 + Math.random() * 80;
+      this.tweens.add({ targets: p, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, alpha: 0, angle: 180, duration: 500 + Math.random() * 300, onComplete: () => p.destroy() });
+    }
+  }
+  floatText(pos, txt) {
+    const tx = this.add.bitmapText(pos.x, pos.y, 'font_num_gold', txt, 44).setOrigin(0.5);
+    this.fxLayer.add(tx);
+    this.tweens.add({ targets: tx, y: pos.y - 80, alpha: 0, duration: 800, delay: 150, ease: 'Quad.Out', onComplete: () => tx.destroy() });
+  }
+  comboText(level) {
+    if (this.comboImg) this.comboImg.destroy();
+    const n = Math.min(5, level - 1);
+    const img = this.add.image(W / 2, (BOARD_TOP + this.boardBottom) / 2 - 120, `txt_combo_${n}`).setDepth(40).setScale(0);
+    this.comboImg = img;
+    this.tweens.add({ targets: img, scale: 0.9, duration: 260, ease: 'Back.Out' });
+    this.tweens.add({ targets: img, alpha: 0, y: img.y - 60, delay: 700, duration: 300, onComplete: () => img.destroy() });
+  }
+  bigText(key, y = (BOARD_TOP + this.boardBottom) / 2) {
+    const img = this.add.image(W / 2, y, key).setDepth(60).setScale(0);
+    this.tweens.add({ targets: img, scale: 0.6, duration: 360, ease: 'Back.Out' });
+    return img;
+  }
+
+  // ═══ 턴 종료 / 승패 ════════════════════════════════════════
+  // 디버그: 애니메이션 결과가 엔진 상태와 같은지 확인 (window.__debug = true 일 때)
+  verifySprites() {
+    const bad = [];
+    this.engine.each((cl, r, c) => {
+      if (!cl.p) return;
+      const sp = this.sprites.get(cl.p.id);
+      const { x, y } = this.xy(r, c);
+      if (!sp) bad.push(`missing ${cl.p.k}#${cl.p.id} @${r},${c}`);
+      else {
+        if (Math.abs(sp.x - x) > 2 || Math.abs(sp.y - y) > 2) bad.push(`pos #${cl.p.id} @${r},${c}`);
+        if (sp.img.texture.key !== this.textureFor(cl.p)) bad.push(`tex #${cl.p.id} ${sp.img.texture.key}≠${this.textureFor(cl.p)}`);
+        if (!!sp.cover !== !!cl.cover) bad.push(`cover #${cl.p.id} @${r},${c}`);
+      }
+    });
+    const ids = new Set(); this.engine.each(cl => cl.p && ids.add(cl.p.id));
+    for (const id of this.sprites.keys()) if (!ids.has(id)) bad.push(`stale #${id}`);
+    if (bad.length) { (window.__mismatch = window.__mismatch || []).push({ level: this.levelId, turn: this.engine.s.turn, bad }); console.warn('sprite mismatch', bad.slice(0, 5)); }
+    return bad;
+  }
+
+  afterTurn() {
+    if (window.__debug) this.verifySprites();
+    this.syncAll();
+    const s = this.engine.s;
+    this.updateHUD({ score: s.score, moves: s.moves, goals: s.goals.map(g => g.progress) });
+    if (s.status === 'win') return this.winSequence();
+    if (s.status === 'lose') return this.loseSequence();
+    if (s.moves === 5) { audio.play('sfx_moves_low'); this.tweens.add({ targets: this.movesBox, scale: 1.15, yoyo: true, repeat: 2, duration: 150 }); }
+    this.busy = false;
+    this.scheduleHint();
+  }
+
+  async winSequence() {
+    this.busy = true; this.resetHint();
+    const clear = this.bigText('txt_level_clear');
+    audio.play('jingle_win');
+    await wait(this, 1300);
+    this.tweens.add({ targets: clear, alpha: 0, duration: 250, onComplete: () => clear.destroy() });
+    if (this.engine.s.moves > 0) {
+      const bonus = this.bigText('txt_bonus_time', BOARD_TOP + 60);
+      this.tweens.add({ targets: bonus, alpha: 0, delay: 900, duration: 300, onComplete: () => bonus.destroy() });
+      this.speed = 1.8;
+      const steps = this.engine.bonusRound();
+      await this.playSteps(steps);
+      this.speed = 1;
+      this.syncAll();
+      this.updateHUD({ score: this.engine.s.score, moves: 0 });
+    }
+    await wait(this, 300);
+    this.winPopup();
+  }
+
+  winPopup() {
+    const e = this.engine;
+    const stars = Math.max(1, e.starsEarned());
+    const coins = 20 + stars * 10 + (this.level.boss ? 30 : 0);
+    const d = load();
+    const firstClear = !d.stars[this.levelId];
+    recordWin(this.levelId, stars, e.s.score, LEVELS.length + 1);
+    addCoins(coins);
+    // 진행 보상: 5레벨마다 처음 클리어하면 부스터 선물 (막혔을 때의 구제책이 아니라 진행에 대한 보상)
+    const GIFTS = ['hammer', 'shuffle', 'swap', 'moves'];
+    const gift = firstClear && this.levelId % 5 === 0 ? GIFTS[(this.levelId / 5 - 1) % GIFTS.length] : null;
+    if (gift) addBooster(gift, 1);
+    const p = popup(this, { title: t('levelClear'), width: 900, height: 1080, closeButton: false });
+    p.box.add(starsRow(this, 0, -300, stars, { size: 190, gap: 220, animate: true }));
+    p.box.add(this.add.text(0, -120, t('score'), TXT.dark).setOrigin(0.5));
+    const sc = this.add.bitmapText(0, -40, 'font_num_gold', '0', 84).setOrigin(0.5);
+    p.box.add(sc);
+    this.tweens.addCounter({ from: 0, to: e.s.score, duration: 900, delay: 300, onUpdate: tw => sc.setText(Math.round(tw.getValue()).toLocaleString('en-US')) });
+    p.box.add(this.add.text(0, 50, `${t('best')} ${Math.max(e.s.score, d.best[this.levelId] || 0).toLocaleString('en-US')}`, { ...TXT.dark, fontSize: '34px' }).setOrigin(0.5));
+    const rx = gift ? -150 : -50;
+    p.box.add(this.add.image(rx, 140, 'ico_coin').setScale(0.45));
+    p.box.add(this.add.text(rx + 45, 140, `+${coins}`, { ...TXT.mid, stroke: '#7A3F00' }).setOrigin(0, 0.5));
+    if (gift) {
+      const gi = this.add.image(110, 140, `boost_${gift}`).setScale(0.55);
+      p.box.add([gi, this.add.text(160, 140, '+1', { ...TXT.mid, stroke: '#1E6A44' }).setOrigin(0, 0.5)]);
+      this.tweens.add({ targets: gi, scale: 0.65, yoyo: true, repeat: 3, duration: 260, delay: 1500 });
+    }
+    this.time.delayedCall(1300, () => audio.play('sfx_coin'));
+    const hasNext = this.levelId < LEVELS.length;
+    p.box.add(button(this, 0, 300, hasNext ? t('next') : t('map'), () => this.goNext(), { width: 520, height: 160, size: 60 }));
+    p.box.add(iconButton(this, -330, 300, 'ico_retry', () => this.restart(), { size: 130 }));
+    p.box.add(iconButton(this, 330, 300, 'ico_map', () => this.toMap(), { size: 130 }));
+    const m = this.add.image(330, 110, 'mascot_happy').setScale(0.2);
+    p.box.add(m);
+    this.tweens.add({ targets: m, y: m.y - 16, yoyo: true, repeat: -1, duration: 400 });
+  }
+
+  loseSequence() {
+    this.busy = true; this.resetHint();
+    if (this.engine.s.loseReason === 'timer') return this.failPopup(t('timerBoom'));
+    const img = this.bigText('txt_out_of_moves');
+    this.time.delayedCall(1000, () => { img.destroy(); this.extraMovesPopup(); });
+  }
+
+  extraMovesPopup() {
+    const d = load();
+    const p = popup(this, { title: t('outOfMoves'), width: 900, height: 1000, closeButton: false });
+    p.box.add(this.add.image(0, -230, 'boost_moves').setScale(1.4));
+    p.box.add(this.add.text(0, -60, t('plus5Ask'), TXT.body).setOrigin(0.5));
+    this.goalSummary(p.box, 50);
+    const owned = d.boosters.moves || 0;
+    const label = owned > 0 ? `${t('plus5')} (${owned})` : `${t('plus5')}  ${BOOSTER_PRICE.moves}`;
+    p.box.add(button(this, 0, 250, label, () => {
+      if (owned > 0) useBooster('moves');
+      else if (!spendCoins(BOOSTER_PRICE.moves)) { toast(this, t('notEnough')); return; }
+      audio.play('sfx_booster');
+      this.engine.addMoves(5);
+      p.close();
+      this.updateHUD({ moves: this.engine.s.moves });
+      this.engine.ensurePlayable();
+      this.syncAll();
+      this.busy = false; this.scheduleHint();
+    }, { width: 580, height: 150, size: 52 }));
+    if (owned <= 0) {
+      p.box.add(this.add.image(-70, 360, 'ico_coin').setScale(0.36));
+      p.box.add(this.add.text(-35, 360, `${d.coins}`, { ...TXT.dark, fontSize: '36px' }).setOrigin(0, 0.5));
+    }
+    p.box.add(button(this, 0, 440, t('giveUp'), () => { p.close(true); this.failPopup(t('outOfMoves')); }, { kind: 'secondary', width: 380, height: 120, size: 42 }));
+  }
+
+  goalSummary(box, y) {
+    const s = this.engine.s;
+    s.goals.forEach((g, i) => {
+      const x = (i - (s.goals.length - 1) / 2) * 170;
+      box.add(this.add.image(x, y + 30, this.goalIcon(g)).setScale(g.type === 'score' ? 1.4 : 0.7));
+      const left = g.type === 'score' ? Math.max(0, g.target - s.score) : Math.max(0, g.target - g.progress);
+      box.add(left <= 0 ? this.add.image(x + 40, y + 70, 'hud_goal_check').setScale(0.6) : this.add.text(x, y + 100, g.type === 'score' ? `${Math.ceil(left / 1000)}k` : `${left}`, { ...TXT.small }).setOrigin(0.5));
+    });
+  }
+
+  failPopup(reason) {
+    audio.play('jingle_lose');
+    const p = popup(this, { title: t('failed'), width: 900, height: 980, closeButton: false });
+    p.box.add(this.add.image(0, -230, 'popup_deco_fail').setScale(0.55));
+    p.box.add(this.add.text(0, -40, reason, TXT.body).setOrigin(0.5));
+    this.goalSummary(p.box, 40);
+    p.box.add(button(this, 0, 290, t('retry'), () => this.restart(), { width: 520, height: 160, size: 60 }));
+    p.box.add(button(this, 0, 430, t('map'), () => this.toMap(), { kind: 'secondary', width: 380, height: 120, size: 42 }));
+  }
+
+  pausePopup() {
+    if (this.busy && !this.armed) return;
+    this.resetHint();
+    const wasBusy = this.busy; this.busy = true;
+    const d = load();
+    const p = popup(this, { title: t('paused'), width: 860, height: 1000, onClose: () => { this.busy = wasBusy; if (!wasBusy) this.scheduleHint(); } });
+    const row = (y, label, getOn, toggle, on, off) => {
+      p.box.add(this.add.text(-280, y, label, TXT.dark).setOrigin(0, 0.5));
+      const b = iconButton(this, 220, y, getOn() ? on : off, () => { const v = toggle(); b.icon.setTexture(v ? on : off); });
+      p.box.add(b);
+    };
+    row(-250, t('sound'), () => d.sfx, () => audio.toggleSfx(), 'ico_sound_on', 'ico_sound_off');
+    row(-90, t('music'), () => d.music, () => audio.toggleMusic(), 'ico_music_on', 'ico_music_off');
+    p.box.add(button(this, 0, 90, t('resume'), () => p.close(), { width: 520, height: 150, size: 56 }));
+    p.box.add(button(this, -150, 260, t('retry'), () => this.restart(), { kind: 'secondary', width: 280, height: 120, size: 40 }));
+    p.box.add(button(this, 150, 260, t('quit'), () => this.toMap(), { kind: 'secondary', width: 280, height: 120, size: 40 }));
+  }
+
+  levelStartPopup() {
+    const lv = this.level;
+    const p = popup(this, { title: `${t('level')} ${lv.id}`, width: 900, height: 900, closeButton: false });
+    p.box.add(this.add.text(0, -250, t('goal'), TXT.dark).setOrigin(0.5));
+    const s = this.engine.s;
+    s.goals.forEach((g, i) => {
+      const x = (i - (s.goals.length - 1) / 2) * 200;
+      p.box.add(this.add.image(x, -120, 'hud_goal_box').setScale(1.05));
+      p.box.add(this.add.image(x, -130, this.goalIcon(g)).setScale(g.type === 'score' ? 1.7 : 0.82));
+      const txt = g.type === 'score' ? g.target.toLocaleString('en-US') : `${g.target}`;
+      p.box.add(this.add.text(x, -30, txt, { ...TXT.small }).setOrigin(0.5));
+    });
+    p.box.add(this.add.text(0, 70, `${t('moves')}  ${s.moves}`, TXT.dark).setOrigin(0.5));
+    p.box.add(starsRow(this, 0, 175, load().stars[lv.id] || 0, { size: 80, gap: 96, key: 'small' }));
+    p.box.add(button(this, 0, 320, t('start'), () => { p.close(); this.startPlay(); }, { width: 520, height: 160, size: 60 }));
+  }
+
+  startPlay() {
+    const tut = this.level.tutorial;
+    const d = load();
+    if (tut && !d.seenTut[tut.key]) {
+      d.seenTut[tut.key] = true; save();
+      this.tutorialBubble(t(`tut.${tut.key}`), () => { this.busy = false; if (tut.hand) this.showTutorialHand(); this.scheduleHint(); });
+    } else { this.busy = false; this.scheduleHint(); }
+  }
+
+  tutorialBubble(text, done) {
+    const layer = this.add.container(0, 0).setDepth(900);
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x3A1F2E, 0.35).setInteractive();
+    const m = this.add.image(170, H - 430, 'mascot_talk').setScale(0.3);
+    const bubble = this.add.nineslice(W / 2 + 90, H - 600, 'popup_panel', null, 780, 300, 96, 96, 96, 96);
+    const txt = this.add.text(bubble.x, bubble.y, text, { ...TXT.body, fontSize: '38px', wordWrap: { width: 680, useAdvancedWrap: true } }).setOrigin(0.5);
+    const hint = this.add.text(bubble.x + 300, bubble.y + 120, '▶', { ...TXT.small, fontSize: '30px' }).setOrigin(0.5);
+    this.tweens.add({ targets: hint, alpha: 0.3, yoyo: true, repeat: -1, duration: 400 });
+    layer.add([dim, m, bubble, txt, hint]);
+    layer.setAlpha(0); this.tweens.add({ targets: layer, alpha: 1, duration: 250 });
+    this.tweens.add({ targets: m, y: m.y - 14, yoyo: true, repeat: -1, duration: 500 });
+    dim.once('pointerup', () => { audio.play('sfx_click'); this.tweens.add({ targets: layer, alpha: 0, duration: 200, onComplete: () => { layer.destroy(); done(); } }); });
+  }
+
+  showTutorialHand() {
+    const m = this.engine.possibleMoves(1)[0]; if (!m) return;
+    const a = this.xy(...m[0]), b = this.xy(...m[1]);
+    const hand = this.add.image(a.x + 30, a.y + 50, 'tutorial_hand').setScale(0.55).setOrigin(0.3, 0.1);
+    this.overLayer.add(hand);
+    this.tutorialHand = hand;
+    this.tweens.add({ targets: hand, x: b.x + 30, y: b.y + 50, yoyo: true, repeat: -1, duration: 700, hold: 200, repeatDelay: 250, ease: 'Sine.InOut' });
+  }
+
+  // ═══ 화면 이동 ═════════════════════════════════════════════
+  restart() { this.scene.restart({ levelId: this.levelId }); }
+  toMap() { this.scene.start('Map', { celebrate: true }); }
+  goNext() {
+    if (this.levelId < LEVELS.length) this.scene.restart({ levelId: this.levelId + 1 });
+    else this.toMap();
+  }
+}

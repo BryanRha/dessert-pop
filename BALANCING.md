@@ -1,0 +1,52 @@
+# 레벨 밸런싱 기준
+
+매치3 장르에서 플레이어 반응이 좋았던 공개 사례·분석을 바탕으로 정한 기준.
+특정 게임의 레벨 데이터를 옮긴 것이 아니라, 장르 공통의 설계 원칙만 따른다.
+
+## 1. 기준
+
+| 원칙 | 기준값 | 근거 |
+|---|---|---|
+| 레벨 길이 | 일반 25수, 고비 28수, 회복 22수, 튜토리얼 18수 (허용 15~32) | 인기 게임 일반 레벨 23~30수, 평균 약 25수 |
+| 초반 | 1~3레벨 99%, 4~9레벨 86~93% 첫 시도 클리어 | 초반은 규칙 익히기용 |
+| 첫 고비 | 10레벨 (55%) | 업계 관행상 첫 어려운 레벨은 10번째 |
+| 톱니형 곡선 | 5레벨마다 고비 (10·15·20·25·30), 고비 바로 다음은 회복 레벨 (11·16·21·26) | 일반 레벨 평균 1.2회 시도, 정해진 간격의 어려운 레벨, 회복 레벨이 중요 |
+| 일반 레벨 | 월드 2: 78~86%, 월드 3: 70~80% | 평균 1.2회 시도 ≈ 80~85% |
+| 니어미스 | 진 판 중 3수 이내로 아깝게 진 비율을 높게 | 1~2수 차이로 진 플레이어가 재도전·구매 확률이 훨씬 높음 |
+| 남는 이동 | 이긴 판의 평균 잔여 이동 3~10수 | 30수를 남기고 깨는 레벨은 지루하다는 평가 |
+| 부스터 | 막힘 해결용이 아니라 진행 보상으로 지급 (5레벨마다 첫 클리어 시 1개) | 부스터를 "레벨 설계 실패의 사과"로 쓰지 말 것 |
+| 클리어 즉시 종료 | 목표를 달성하면 바로 끝나고, 남은 이동은 보너스 타임으로 자동 전환 | 장르 표준 (남은 이동을 억지로 쓰게 하지 않음) |
+| 점수 목표 레벨 없음 | 모든 레벨은 미션(수집·젤리·재료·장애물) 목표 | 점수는 연쇄 운에 따라 편차가 커서, 클리어율을 맞추면 대부분 몇 수 만에 끝나 버림. 요즘 인기작도 점수 목표를 쓰지 않는 추세 |
+| 레벨 정의 검사 | 수집 목표 색은 그 레벨에 실제로 나오는 색이어야 함 (`npm test` 가 검사) | 깰 수 없는 레벨 방지 |
+
+## 2. 측정 방법
+
+- **사람 봇** (`tools/bot.js` 의 `chooseMoveHuman`): 연쇄를 내다보지 않고 스왑 직후 보이는 매치만 평가,
+  25% 확률로 아무 수나 두고, 비슷한 가치의 수는 구분하지 않는다. 일반 플레이어 기준.
+- **탐욕 봇** (`chooseMove`): 모든 수를 연쇄까지 시뮬레이션 — 사람보다 훨씬 강해서 밸런싱 기준으로 쓰지 않는다.
+- **니어미스**: 진 판에 1수씩 더 주며 계속 두어, 이기기까지 몇 수가 더 필요했는지 측정.
+
+## 3. 자동 조정 (`node tools/tune.js 60`)
+
+1. 이동 수를 위 표준 길이로 고정
+2. 목표량(재료·장애물·수집 개수)을 이분 탐색해서 목표 클리어율에 맞춤
+3. 목표량을 조절할 수 없는 레벨(젤리 전용)만 이동 수를 탐색
+4. 점수 레벨은 끝까지 둔 점수 분포로 별 기준 설정
+5. 결과는 `src/core/levels_tuning.js` 에 기록 (레벨 정의를 덮어씀)
+
+## 4. 실제 플레이 데이터로 보정하기
+
+봇은 사람과 같지 않다. 출시 후에는 레벨별 실제 지표로 다시 맞춘다.
+
+- 레벨별 시도 횟수, 첫 시도 클리어율, 실패 시 남은 목표량, +5 이동 구매율, 이탈 레벨
+- 실제 클리어율이 목표보다 낮으면 목표량을 줄이고, 높으면 늘린다 (이동 수는 표준 길이 유지)
+
+## 참고 자료
+
+- [Playrix: Creating levels and elements for match-3 games](https://gameworldobserver.com/2019/09/27/playrix-levels-elements-match-3)
+- [Royal Match Level Design Insights — Gamigion](https://www.gamigion.com/royal-match-level-design-insights/)
+- [How difficulty curve increases retention and monetization in Royal Match — Playliner](https://playliner.com/tpost/l8zzrb9el1-how-difficulty-curve-increases-retention)
+- [Designing Difficulty Curves in Word and Match-3 Games — Raviosoft](https://www.raviosoft.com/post/designing-difficulty-curves-in-word-and-match-3-games)
+- [How often do difficult levels occur in Match-3 — WN Hub](https://wnhub.io/news/game-design/item-14053)
+- [The design of Streak Systems in Match-3 Games](https://medium.com/@abhayram/the-design-of-streak-systems-in-match-3-games-e9c6787a1a9e)
+- [Match 3 — Game Developer](https://www.gamedeveloper.com/design/match-3)
