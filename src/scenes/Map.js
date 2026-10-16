@@ -51,34 +51,43 @@ export class MapScene extends Phaser.Scene {
     for (let w = 1; w <= WORLDS; w++) {
       const img = this.add.image(W / 2, (WORLDS - w) * WORLD_H + WORLD_H / 2, `map_world_${w}`);
       img.setDisplaySize(W, WORLD_H);
-      const banner = this.add.image(W / 2, (WORLDS - w + 1) * WORLD_H - 120, 'popup_ribbon').setDisplaySize(760, 170);
-      this.add.text(W / 2, banner.y - 8, `${w}. ${t('worldName')[w - 1]}`, { ...TXT.mid, stroke: '#9A2E56' }).setOrigin(0.5);
+      const banner = this.add.image(W / 2, (WORLDS - w + 1) * WORLD_H - 120, 'popup_ribbon').setDisplaySize(760, 170).setDepth(3);
+      this.add.text(W / 2, banner.y - 8, `${w}. ${t('worldName')[w - 1]}`, { ...TXT.mid, stroke: '#9A2E56' }).setOrigin(0.5).setDepth(4);
     }
-    // 장식 (길과 겹치지 않는 곳)
-    const rnd = new Phaser.Math.RandomDataGenerator(['dessert-map']);
-    for (let w = 1; w <= WORLDS; w++) {
-      for (let i = 0; i < 16; i++) {
-        const y = (WORLDS - w) * WORLD_H + 300 + rnd.frac() * (WORLD_H - 600);
-        const k = Math.max(0, Math.min(9, Math.round((WORLD_H - 380 - (y - (WORLDS - w) * WORLD_H)) / ((WORLD_H - 760) / 9))));
-        const px = nodePos((w - 1) * 10 + k + 1).x;
-        let x = px < W / 2 ? W / 2 + 170 + rnd.frac() * 300 : 80 + rnd.frac() * 300;
-        const key = `map_deco_${rnd.pick(DECOS)}`;
-        const s = this.add.image(x, y, key).setScale(0.5 + rnd.frac() * 0.35).setAlpha(0.95);
-        if (key.includes('cloud')) { s.setAlpha(0.8); this.tweens.add({ targets: s, x: x + 40, yoyo: true, repeat: -1, duration: 4000 + rnd.frac() * 3000, ease: 'Sine.InOut' }); }
-      }
-    }
-    // 길
+    // 길 좌표를 먼저 계산 (장식 배치와 점선 그리기에 함께 사용)
+    const path = [];
     for (let id = 1; id < LEVELS.length; id++) {
       const a = nodePos(id), b = nodePos(id + 1);
-      const dist = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
-      const n = Math.floor(dist / 62);
+      const n = Math.floor(Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y) / 62);
       const cx = (a.x + b.x) / 2 + (a.x < b.x ? -60 : 60), cy = (a.y + b.y) / 2;
       for (let i = 1; i < n; i++) {
         const tt = i / n;
-        const x = (1 - tt) ** 2 * a.x + 2 * (1 - tt) * tt * cx + tt * tt * b.x;
-        const y = (1 - tt) ** 2 * a.y + 2 * (1 - tt) * tt * cy + tt * tt * b.y;
-        this.add.image(x, y, 'map_path_dot').setAlpha(id < d.unlocked ? 1 : 0.55);
+        path.push({ id, x: (1 - tt) ** 2 * a.x + 2 * (1 - tt) * tt * cx + tt * tt * b.x, y: (1 - tt) ** 2 * a.y + 2 * (1 - tt) * tt * cy + tt * tt * b.y });
       }
+    }
+    const nodes = LEVELS.map(l => nodePos(l.id));
+    const banners = [1, 2, 3].map(w => (WORLDS - w + 1) * WORLD_H - 120);
+    // 노드(번호 + 아래 별 줄)와 배너 영역은 비워 둔다
+    const nearNode = (x, y, pad = 0) => nodes.some(n => Math.abs(x - n.x) < 100 + pad && y > n.y - 110 - pad && y < n.y + 135 + pad);
+    const nearBanner = (x, y, pad = 0) => banners.some(by => Math.abs(y - by) < 100 + pad && Math.abs(x - W / 2) < 420 + pad);
+    // 장식: 길·노드·배너에서 충분히 떨어진 곳에만
+    const rnd = new Phaser.Math.RandomDataGenerator(['dessert-map']);
+    for (let w = 1; w <= WORLDS; w++) {
+      let placed = 0;
+      for (let tries = 0; tries < 200 && placed < 14; tries++) {
+        const y = (WORLDS - w) * WORLD_H + 260 + rnd.frac() * (WORLD_H - 520);
+        const x = 90 + rnd.frac() * (W - 180);
+        if (nearNode(x, y, 90) || nearBanner(x, y, 60) || path.some(pt => Math.hypot(pt.x - x, pt.y - y) < 150)) continue;
+        const key = `map_deco_${rnd.pick(DECOS)}`;
+        const s = this.add.image(x, y, key).setScale(0.45 + rnd.frac() * 0.3).setAlpha(0.95);
+        if (key.includes('cloud')) { s.setAlpha(0.8); this.tweens.add({ targets: s, x: x + 30, yoyo: true, repeat: -1, duration: 4000 + rnd.frac() * 3000, ease: 'Sine.InOut' }); }
+        placed++;
+      }
+    }
+    // 길 점선
+    for (const pt of path) {
+      if (nearNode(pt.x, pt.y) || nearBanner(pt.x, pt.y)) continue;
+      this.add.image(pt.x, pt.y, 'map_path_dot').setAlpha(pt.id < d.unlocked ? 1 : 0.55);
     }
     // 노드
     for (const lv of LEVELS) {

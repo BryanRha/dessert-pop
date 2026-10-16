@@ -96,7 +96,7 @@ export class GameScene extends Phaser.Scene {
       for (const key of Object.keys(e.s.exits)) {
         const [r, c] = key.split(',').map(Number);
         const { x, y } = this.xy(r, c);
-        const a = this.add.image(x, y + CELL / 2 + 26, 'board_exit').setScale(0.42);
+        const a = this.add.image(x, y + CELL / 2 + 46, 'board_exit').setScale(0.36);
         this.frameLayer.add(a);
         this.tweens.add({ targets: a, y: a.y + 8, yoyo: true, repeat: -1, duration: 500 });
       }
@@ -179,10 +179,11 @@ export class GameScene extends Phaser.Scene {
   buildHUD() {
     const s = this.engine.s;
     this.add.image(W / 2, 0, 'hud_topbar').setOrigin(0.5, 0).setDepth(20);
-    const mb = this.add.image(140, 140, 'hud_moves_box').setDepth(20);
+    // 이동 수: 라벨과 숫자 모두 안쪽 크림 원 안에 (테두리와 겹치지 않게)
+    const mb = this.add.image(140, 126, 'hud_moves_box').setScale(0.95).setDepth(20);
     this.movesBox = mb;
-    this.add.text(140, 66, t('moves'), { ...TXT.small, fontSize: '30px', strokeThickness: 6 }).setOrigin(0.5).setDepth(21);
-    this.movesText = this.add.bitmapText(140, 152, 'font_num_white', `${s.moves}`, 72).setOrigin(0.5).setDepth(21);
+    this.add.text(140, 96, t('moves'), { ...TXT.dark, fontSize: '26px' }).setOrigin(0.5).setDepth(21);
+    this.movesText = this.add.bitmapText(140, 146, 'font_num_white', `${s.moves}`, 64).setOrigin(0.5).setDepth(21);
     this.add.text(140, 268, `${t('level')} ${this.levelId}`, { ...TXT.small, fontSize: '32px' }).setOrigin(0.5).setDepth(21);
     iconButton(this, W - 86, 92, 'ico_settings', () => this.pausePopup(), { size: 116 }).setDepth(22);
 
@@ -191,26 +192,29 @@ export class GameScene extends Phaser.Scene {
     const goals = s.goals;
     const span = 600, startX = 300 + (span - goals.length * 170) / 2 + 85;
     goals.forEach((g, i) => {
-      const x = startX + i * 170, y = 140;
-      const box = this.add.image(x, y, 'hud_goal_box').setDepth(20);
-      const icon = this.add.image(x, y - 12, this.goalIcon(g)).setDepth(21);
-      icon.setScale(g.type === 'jelly' ? 0.85 : g.type === 'score' ? 1.6 : 0.78);
-      const txt = this.add.bitmapText(x, y + 46, 'font_num_white', '', 54).setOrigin(0.5).setDepth(22);
-      const check = this.add.image(x + 48, y + 44, 'hud_goal_check').setScale(0.7).setDepth(22).setVisible(false);
+      // 목표 칸: 아이콘은 위, 남은 개수는 칸 안쪽 아래 (테두리와 겹치지 않게)
+      const x = startX + i * 170, y = 118;
+      this.add.nineslice(x, y, 'hud_goal_box', null, 152, 164, 40, 40, 40, 40).setDepth(20);
+      const icon = this.add.image(x, y - 20, this.goalIcon(g)).setDepth(21);
+      icon.setScale(g.type === 'jelly' ? 0.68 : g.type === 'score' ? 1.4 : 0.62);
+      const txt = this.add.bitmapText(x, y + 46, 'font_num_white', '', 44).setOrigin(0.5).setDepth(22);
+      const check = this.add.image(x, y + 46, 'hud_goal_check').setScale(0.55).setDepth(22).setVisible(false);
       this.goalViews.push({ g, icon, txt, check, x, y });
     });
     // 점수 바
-    this.add.image(W / 2, 318, 'hud_score_bar_bg').setDisplaySize(620, 52).setDepth(20);
-    this.scoreFill = this.add.image(W / 2 - 310, 318, 'hud_score_bar_fill').setOrigin(0, 0.5).setDisplaySize(620, 52).setDepth(21);
+    const BAR_Y = 304;
+    this.add.image(W / 2, BAR_Y, 'hud_score_bar_bg').setDisplaySize(620, 52).setDepth(20);
+    this.scoreFill = this.add.image(W / 2 - 310, BAR_Y, 'hud_score_bar_fill').setOrigin(0, 0.5).setDisplaySize(620, 52).setDepth(21);
     this.scoreFillW = this.scoreFill.width;
     this.scoreFill.setCrop(0, 0, 0, this.scoreFill.height);
     this.scoreStars = s.stars.map((th, i) => {
-      const x = W / 2 - 310 + 620 * Math.min(1, th / s.stars[2]) - (i === 2 ? 16 : 0);
-      const off = this.add.image(x, 318, 'hud_score_star_off').setScale(0.5).setDepth(22);
-      const on = this.add.image(x, 318, 'hud_score_star_on').setScale(0.5).setDepth(22).setVisible(false);
+      // 별 표시는 바 양 끝 테두리 안쪽으로 (끝 캡과 겹치지 않게)
+      const x = Phaser.Math.Clamp(W / 2 - 310 + 620 * Math.min(1, th / s.stars[2]), W / 2 - 310 + 34, W / 2 + 310 - 34);
+      const off = this.add.image(x, BAR_Y, 'hud_score_star_off').setScale(0.5).setDepth(22);
+      const on = this.add.image(x, BAR_Y, 'hud_score_star_on').setScale(0.5).setDepth(22).setVisible(false);
       return { off, on, th };
     });
-    this.scoreText = this.add.bitmapText(W / 2, 264, 'font_num_gold', '0', 40).setOrigin(0.5).setDepth(22);
+    this.scoreText = this.add.bitmapText(W / 2, 252, 'font_num_gold', '0', 40).setOrigin(0.5).setDepth(22);
     this.updateHUD({ score: s.score, moves: s.moves, goals: s.goals.map(g => g.progress) });
   }
 
@@ -248,7 +252,7 @@ export class GameScene extends Phaser.Scene {
         const left = g.type === 'score' ? Math.max(0, g.target - snap.score) : Math.max(0, g.target - prog);
         const done = left <= 0;
         v.txt.setText(done ? '' : g.type === 'score' ? `${Math.ceil(left / 1000)}k` : `${left}`);
-        if (done && !v.check.visible) { v.check.setVisible(true).setScale(0); this.tweens.add({ targets: v.check, scale: 0.7, duration: 280, ease: 'Back.Out' }); }
+        if (done && !v.check.visible) { v.check.setVisible(true).setScale(0); this.tweens.add({ targets: v.check, scale: 0.55, duration: 280, ease: 'Back.Out' }); }
         if (v.lastLeft !== undefined && left < v.lastLeft) this.tweens.add({ targets: v.icon, scale: v.icon.scale * 1.15, yoyo: true, duration: 90 });
         v.lastLeft = left;
       });
@@ -758,39 +762,129 @@ export class GameScene extends Phaser.Scene {
 
   winPopup() {
     const e = this.engine;
+    const score = e.s.score;
+    const th = e.s.stars;
     const stars = Math.max(1, e.starsEarned());
-    const coins = 20 + stars * 10 + (this.level.boss ? 30 : 0);
     const d = load();
-    const firstClear = !d.stars[this.levelId];
-    recordWin(this.levelId, stars, e.s.score, LEVELS.length + 1);
+    const prevStars = d.stars[this.levelId] || 0;
+    const prevBest = d.best[this.levelId] || 0;
+    const firstClear = !prevStars;
+    const first3 = stars === 3 && prevStars < 3;
+    const coins = 20 + stars * 10 + (this.level.boss ? 30 : 0) + (first3 ? 30 : 0);
+    recordWin(this.levelId, stars, score, LEVELS.length + 1);
     addCoins(coins);
     // 진행 보상: 5레벨마다 처음 클리어하면 부스터 선물 (막혔을 때의 구제책이 아니라 진행에 대한 보상)
     const GIFTS = ['hammer', 'shuffle', 'swap', 'moves'];
     const gift = firstClear && this.levelId % 5 === 0 ? GIFTS[(this.levelId / 5 - 1) % GIFTS.length] : null;
     if (gift) addBooster(gift, 1);
-    const p = popup(this, { title: t('levelClear'), width: 900, height: 1080, closeButton: false });
-    p.box.add(starsRow(this, 0, -300, stars, { size: 190, gap: 220, animate: true }));
-    p.box.add(this.add.text(0, -120, t('score'), TXT.dark).setOrigin(0.5));
-    const sc = this.add.bitmapText(0, -40, 'font_num_gold', '0', 84).setOrigin(0.5);
-    p.box.add(sc);
-    this.tweens.addCounter({ from: 0, to: e.s.score, duration: 900, delay: 300, onUpdate: tw => sc.setText(Math.round(tw.getValue()).toLocaleString('en-US')) });
-    p.box.add(this.add.text(0, 50, `${t('best')} ${Math.max(e.s.score, d.best[this.levelId] || 0).toLocaleString('en-US')}`, { ...TXT.dark, fontSize: '34px' }).setOrigin(0.5));
-    const rx = gift ? -150 : -50;
-    p.box.add(this.add.image(rx, 140, 'ico_coin').setScale(0.45));
-    p.box.add(this.add.text(rx + 45, 140, `+${coins}`, { ...TXT.mid, stroke: '#7A3F00' }).setOrigin(0, 0.5));
-    if (gift) {
-      const gi = this.add.image(110, 140, `boost_${gift}`).setScale(0.55);
-      p.box.add([gi, this.add.text(160, 140, '+1', { ...TXT.mid, stroke: '#1E6A44' }).setOrigin(0, 0.5)]);
-      this.tweens.add({ targets: gi, scale: 0.65, yoyo: true, repeat: 3, duration: 260, delay: 1500 });
-    }
-    this.time.delayedCall(1300, () => audio.play('sfx_coin'));
+
+    const p = popup(this, { title: t('levelClear'), width: 900, height: 1180, closeButton: false });
+    const B = p.box;
+    // ① 별 자리 (빈 별) — 점수가 기준을 넘는 순간 하나씩 채워진다
+    const slots = [0, 1, 2].map(i => {
+      const x = (i - 1) * 220, y = -360 + (i === 1 ? -30 : 0), size = i === 1 ? 210 : 180;
+      B.add(this.add.image(x, y, 'star_big_off').setDisplaySize(size, size));
+      return { x, y, size };
+    });
+    // ② 점수 카운트 + 미니 점수 바
+    B.add(this.add.text(0, -200, t('score'), { ...TXT.dark, fontSize: '36px' }).setOrigin(0.5));
+    const sc = this.add.bitmapText(0, -130, 'font_num_gold', '0', 88).setOrigin(0.5);
+    B.add(sc);
+    const BW = 560, bx = -BW / 2, by = -50;
+    B.add(this.add.image(0, by, 'hud_score_bar_bg').setDisplaySize(BW, 44));
+    const fill = this.add.image(bx, by, 'hud_score_bar_fill').setOrigin(0, 0.5).setDisplaySize(BW, 44);
+    const fw = fill.width; fill.setCrop(0, 0, 0, fill.height);
+    B.add(fill);
+    const marks = th.map(v => {
+      const x = Phaser.Math.Clamp(bx + BW * Math.min(1, v / th[2]), bx + 30, bx + BW - 30);
+      const off = this.add.image(x, by, 'hud_score_star_off').setScale(0.45);
+      const on = this.add.image(x, by, 'hud_score_star_on').setScale(0.45).setVisible(false);
+      B.add([off, on]);
+      return on;
+    });
+    const popStar = i => {
+      const sl = slots[i];
+      const st = this.add.image(sl.x, sl.y, 'star_big_on').setDisplaySize(sl.size, sl.size);
+      const target = st.scale; st.setScale(0);
+      B.add(st);
+      this.tweens.add({ targets: st, scale: target, duration: 380, ease: 'Back.Out' });
+      marks[i].setVisible(true);
+      audio.play(`sfx_star_${i + 1}`);
+      const w = { x: W / 2 + sl.x, y: H / 2 + sl.y };
+      for (let k = 0; k < 10; k++) {
+        const pt = this.add.image(w.x, w.y, k % 2 ? 'ptc_star' : 'ptc_spark').setScale(0.35).setTint(0xFFD23F).setDepth(1001);
+        const a = (k / 10) * Math.PI * 2;
+        this.tweens.add({ targets: pt, x: w.x + Math.cos(a) * 170, y: w.y + Math.sin(a) * 170, alpha: 0, angle: 180, duration: 650, onComplete: () => pt.destroy() });
+      }
+    };
+    let shown = 0;
+    const DUR = 1600;
+    this.time.delayedCall(350, () => {
+      popStar(0); shown = 1;   // 클리어하면 별 1개는 항상
+      this.tweens.addCounter({
+        from: 0, to: score, duration: DUR, ease: 'Cubic.Out',
+        onUpdate: tw => {
+          const v = Math.round(tw.getValue());
+          sc.setText(v.toLocaleString('en-US'));
+          fill.setCrop(0, 0, fw * Math.min(1, v / th[2]), fill.height);
+          while (shown < stars && v >= th[shown]) { popStar(shown); shown++; }
+        },
+        onComplete: () => { while (shown < stars) { popStar(shown); shown++; } showRewards(); },
+      });
+    });
+    // ③ 최고 기록 / 다음 별 안내
+    const info = this.add.text(0, 10, '', { ...TXT.dark, fontSize: '32px', align: 'center' }).setOrigin(0.5);
+    B.add(info);
+    // ④ 보상 (코인 카운트 · 선물 · 3별 보너스)
+    const rewardY = 150;
+    const showRewards = () => {
+      if (!firstClear && score > prevBest) {
+        info.setText(t('newBest')).setColor('#E8326F');
+        info.setScale(2).setAlpha(0).setAngle(-8);
+        this.tweens.add({ targets: info, scale: 1, alpha: 1, duration: 300, ease: 'Back.Out' });
+      } else if (stars < 3) {
+        info.setText(t('nextStar', (th[stars] - score).toLocaleString('en-US')));
+      } else {
+        info.setText(t('perfect')).setColor('#E8326F');
+      }
+      if (stars > prevStars && prevStars > 0) {
+        const up = this.add.text(0, info.y + info.height / 2 + 28, t('starUp', prevStars, stars), { ...TXT.small, fontSize: '30px', stroke: '#9A2E56' }).setOrigin(0.5);
+        B.add(up);
+      }
+      const items = [{ icon: 'ico_coin', scale: 0.42, label: `+${coins}`, stroke: '#7A3F00', count: coins }];
+      if (gift) items.push({ icon: `boost_${gift}`, scale: 0.52, label: '+1', stroke: '#1E6A44' });
+      const gap = 230, x0 = -((items.length - 1) * gap) / 2;
+      items.forEach((it, i) => {
+        const x = x0 + i * gap;
+        const ic = this.add.image(x - 45, rewardY, it.icon).setScale(0);
+        const tx = this.add.text(x + 5, rewardY, it.count ? '+0' : it.label, { ...TXT.mid, stroke: it.stroke }).setOrigin(0, 0.5).setAlpha(0);
+        B.add([ic, tx]);
+        this.tweens.add({ targets: ic, scale: it.scale, duration: 300, delay: i * 200, ease: 'Back.Out' });
+        this.tweens.add({ targets: tx, alpha: 1, duration: 200, delay: i * 200 });
+        if (it.count) this.tweens.addCounter({ from: 0, to: it.count, duration: 600, delay: 150, onUpdate: tw => tx.setText(`+${Math.round(tw.getValue())}`) });
+      });
+      audio.play('sfx_coin');
+      if (first3) B.add(this.add.text(0, rewardY + 70, t('first3Bonus'), { ...TXT.small, fontSize: '28px', stroke: '#7A3F00' }).setOrigin(0.5));
+      if (stars === 3) this.confetti();
+    };
+    // ⑤ 버튼 + 마스코트
     const hasNext = this.levelId < LEVELS.length;
-    p.box.add(button(this, 0, 300, hasNext ? t('next') : t('map'), () => this.goNext(), { width: 520, height: 160, size: 60 }));
-    p.box.add(iconButton(this, -330, 300, 'ico_retry', () => this.restart(), { size: 130 }));
-    p.box.add(iconButton(this, 330, 300, 'ico_map', () => this.toMap(), { size: 130 }));
-    const m = this.add.image(330, 110, 'mascot_happy').setScale(0.2);
-    p.box.add(m);
-    this.tweens.add({ targets: m, y: m.y - 16, yoyo: true, repeat: -1, duration: 400 });
+    B.add(button(this, 0, 400, hasNext ? t('next') : t('map'), () => this.goNext(), { width: 500, height: 160, size: 60 }));
+    B.add(iconButton(this, -330, 400, 'ico_retry', () => this.restart(), { size: 130 }));
+    B.add(iconButton(this, 330, 400, 'ico_map', () => this.toMap(), { size: 130 }));
+    const m = this.add.image(370, -420, stars === 3 ? 'mascot_happy' : 'mascot_idle').setScale(0.17);
+    B.add(m);
+    this.tweens.add({ targets: m, y: m.y - 14, yoyo: true, repeat: -1, duration: stars === 3 ? 300 : 700 });
+  }
+
+  confetti() {
+    const colors = [0xFF4D6D, 0xFF9F1C, 0xFFD23F, 0x8CC63F, 0x3EC1F3, 0xA55CF0];
+    for (let i = 0; i < 60; i++) {
+      const c = this.add.image(Phaser.Math.Between(0, W), -40 - Math.random() * 300, 'ptc_confetti')
+        .setTint(colors[i % 6]).setScale(0.8 + Math.random()).setAngle(Math.random() * 360).setDepth(1002);
+      this.tweens.add({ targets: c, y: H + 60, angle: c.angle + Phaser.Math.Between(180, 720), x: c.x + Phaser.Math.Between(-120, 120),
+        duration: 1800 + Math.random() * 1400, delay: Math.random() * 500, ease: 'Sine.In', onComplete: () => c.destroy() });
+    }
   }
 
   loseSequence() {
@@ -872,10 +966,10 @@ export class GameScene extends Phaser.Scene {
     const s = this.engine.s;
     s.goals.forEach((g, i) => {
       const x = (i - (s.goals.length - 1) / 2) * 200;
-      p.box.add(this.add.image(x, -120, 'hud_goal_box').setScale(1.05));
-      p.box.add(this.add.image(x, -130, this.goalIcon(g)).setScale(g.type === 'score' ? 1.7 : 0.82));
+      p.box.add(this.add.nineslice(x, -120, 'hud_goal_box', null, 170, 190, 40, 40, 40, 40));
+      p.box.add(this.add.image(x, -142, this.goalIcon(g)).setScale(g.type === 'score' ? 1.5 : g.type === 'jelly' ? 0.78 : 0.7));
       const txt = g.type === 'score' ? g.target.toLocaleString('en-US') : `${g.target}`;
-      p.box.add(this.add.text(x, -30, txt, { ...TXT.small }).setOrigin(0.5));
+      p.box.add(this.add.text(x, -68, txt, { ...TXT.small, fontSize: '40px' }).setOrigin(0.5));
     });
     p.box.add(this.add.text(0, 70, `${t('moves')}  ${s.moves}`, TXT.dark).setOrigin(0.5));
     p.box.add(starsRow(this, 0, 175, load().stars[lv.id] || 0, { size: 80, gap: 96, key: 'small' }));

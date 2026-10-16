@@ -8,7 +8,7 @@ const STR = {
     buy: '구매', coins: '코인', giveUp: '포기', reward: '보상', best: '최고 점수', locked: '잠김', worldName: ['딸기 정원', '초콜릿 강', '아이스크림 설산'],
     tap: '터치해서 시작', allClear: '모든 레벨 클리어! 다음 업데이트를 기다려 주세요', boosterHammer: '롤리팝 망치', boosterShuffle: '거품기 셔플',
     boosterSwap: '자유 교환', boosterMoves: '+5 이동', buyBooster: '{0}\n{1}코인에 살까요?', tapTarget: '사용할 블록을 터치하세요', swapTarget: '바꿀 두 블록을 차례로 터치하세요',
-    cancel: '취소', ok: '확인', tapSkip: '화면을 터치하면 빨리 감기', hammerNo: '여기에는 망치를 쓸 수 없어요',
+    cancel: '취소', ok: '확인', newBest: '최고 기록 갱신!', nextStar: '다음 별까지 {0}점!\n남은 이동이 많을수록 점수가 커져요', perfect: '완벽해요! 별 3개!', starUp: '별 {0}개 → {1}개 갱신!', first3Bonus: '첫 별 3개 보너스 +30 포함', tapSkip: '화면을 터치하면 빨리 감기', hammerNo: '여기에는 망치를 쓸 수 없어요',
     blocked: { ice: '얼음 사탕 안의 디저트는 움직일 수 없어요. 옆에서 맞춰서 깨 주세요!', chain: '자물쇠로 잠긴 디저트예요. 같은 디저트와 맞추면 풀려요!', bubble: '솜사탕 거품에 갇혔어요. 옆에서 맞추면 터져요!', stone: '브라우니는 움직일 수 없어요. 옆에서 맞춰서 부숴요!', crate: '비스킷은 움직일 수 없어요. 옆에서 맞춰서 부숴요!', slime: '녹은 초콜릿은 움직일 수 없어요. 옆에서 맞춰서 없애요!' }, shuffle: '섞는 중...', reset: '진행 초기화', resetAsk: '정말 처음부터 다시 할까요?',
     goals: { score: '점수 {0}', jelly: '젤리 모두 지우기', drop: '재료 내리기', collect: '블록 모으기', clear: '장애물 부수기', cover: '덮개 깨기', star: '별 코인 모으기' },
     tut: {
@@ -34,7 +34,7 @@ const STR = {
     buy: 'Buy', coins: 'Coins', giveUp: 'Give up', reward: 'Reward', best: 'Best', locked: 'Locked', worldName: ['Strawberry Garden', 'Chocolate River', 'Ice Cream Peaks'],
     tap: 'Tap to start', allClear: 'All levels cleared! More coming soon', boosterHammer: 'Lollipop Hammer', boosterShuffle: 'Whisk Shuffle',
     boosterSwap: 'Free Swap', boosterMoves: '+5 Moves', buyBooster: 'Buy {0} for {1} coins?', tapTarget: 'Tap a piece to use it on', swapTarget: 'Tap two neighbors to swap',
-    cancel: 'Cancel', ok: 'OK', tapSkip: 'Tap to fast-forward', hammerNo: 'The hammer can’t be used here',
+    cancel: 'Cancel', ok: 'OK', newBest: 'New best score!', nextStar: '{0} more points for the next star!\nMore moves left means more points', perfect: 'Perfect! 3 stars!', starUp: 'Stars {0} → {1}!', first3Bonus: 'Includes first 3-star bonus +30', tapSkip: 'Tap to fast-forward', hammerNo: 'The hammer can’t be used here',
     blocked: { ice: 'Desserts in ice candy can’t move. Match next to them to crack it!', chain: 'This dessert is locked. Match it to unlock!', bubble: 'Trapped in a cotton candy bubble. Match next to it to pop it!', stone: 'Brownies can’t move. Match next to them to break them!', crate: 'Biscuits can’t move. Match next to them to break them!', slime: 'Melted chocolate can’t move. Match next to it to clear it!' }, shuffle: 'Shuffling...', reset: 'Reset progress', resetAsk: 'Start over from the beginning?',
     goals: { score: 'Score {0}', jelly: 'Clear all jelly', drop: 'Bring down fruits', collect: 'Collect pieces', clear: 'Break blockers', cover: 'Break covers', star: 'Collect star coins' },
     tut: {
