@@ -18,7 +18,17 @@ cd game && python3 -m http.server 8080
 
 ## 배포
 
-`game/` 폴더 전체(약 15MB)를 정적 호스팅(Netlify, Vercel, GitHub Pages, S3 등)에 올리면 끝.
+**공개 주소: https://bryanrha.github.io/dessert-pop/** (GitHub Pages, 로그인 없이 누구나 플레이)
+
+수정 후 다시 배포하기:
+
+```bash
+bash tools/deploy_pages.sh "변경 내용 한 줄"
+```
+
+`config.js` 의 `VERSION` 을 올려 두면 타이틀 화면 아래 버전으로 반영 여부를 확인할 수 있다.
+
+다른 곳에 올리려면 `game/` 폴더(약 12MB)를 정적 호스팅(Netlify, Vercel, S3 등)에 그대로 올리면 된다.
 `tools/` 폴더는 배포에 필요 없다. PWA 매니페스트가 있어 홈 화면에 추가하면 전체 화면 앱처럼 실행된다.
 
 ## 폴더 구조

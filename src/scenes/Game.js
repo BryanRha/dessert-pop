@@ -25,6 +25,9 @@ export class GameScene extends Phaser.Scene {
     this.armed = null;          // 'hammer' | 'swap'
     this.speed = 1;
     this.hintTimer = null;
+    this.lastScore = 0;
+    this.pendingPause = false;
+    this.explained = new Set();
   }
 
   create() {
@@ -129,7 +132,7 @@ export class GameScene extends Phaser.Scene {
     cont.add(img);
     cont.img = img; cont.piece = { ...p };
     if (p.k === 'timer') {
-      cont.timerText = this.add.text(0, 6, `${p.t}`, { ...TXT.mid, fontSize: '46px', color: '#5A2A3A', stroke: '#FFF6E6', strokeThickness: 6 }).setOrigin(0.5);
+      cont.timerText = this.add.text(0, 8, `${p.t}`, { ...TXT.mid, fontSize: '60px', color: '#5A2A3A', stroke: '#FFF6E6', strokeThickness: 8 }).setOrigin(0.5);
       cont.add(cont.timerText);
     }
     if (cover) { cont.cover = this.add.image(0, 0, this.coverTexture(cover)); cont.add(cont.cover); }
@@ -192,7 +195,7 @@ export class GameScene extends Phaser.Scene {
       const box = this.add.image(x, y, 'hud_goal_box').setDepth(20);
       const icon = this.add.image(x, y - 12, this.goalIcon(g)).setDepth(21);
       icon.setScale(g.type === 'jelly' ? 0.85 : g.type === 'score' ? 1.6 : 0.78);
-      const txt = this.add.bitmapText(x, y + 50, 'font_num_white', '', 42).setOrigin(0.5).setDepth(22);
+      const txt = this.add.bitmapText(x, y + 46, 'font_num_white', '', 54).setOrigin(0.5).setDepth(22);
       const check = this.add.image(x + 48, y + 44, 'hud_goal_check').setScale(0.7).setDepth(22).setVisible(false);
       this.goalViews.push({ g, icon, txt, check, x, y });
     });
@@ -360,7 +363,8 @@ export class GameScene extends Phaser.Scene {
     this.select(null);
     const free = this.armed === 'swap';
     const e = this.engine;
-    if (!e.canSwap(e.cell(...a)) || !e.canSwap(e.cell(...b))) { this.shake(a); return; }
+    const blocked = [a, b].find(pos => !e.canSwap(e.cell(...pos)));
+    if (blocked) { this.shake(blocked); this.explainBlocked(blocked); return; }
     this.busy = true;
     const res = e.swap(a, b, { free });
     if (!res.ok) {
@@ -375,11 +379,26 @@ export class GameScene extends Phaser.Scene {
     this.afterTurn();
   }
   async applyHammer(cell) {
+    const cl = this.engine.cell(...cell);
+    const useful = cl && (cl.cover || cl.jelly > 0 || (cl.p && cl.p.k !== 'drop'));
+    if (!useful) { toast(this, t('hammerNo'), BOARD_TOP + 40); return; }   // 재료·빈칸: 부스터를 쓰지 않음
     this.busy = true; this.armed = null; this.hideArmHint();
     useBooster('hammer'); this.refreshBoosters();
     const res = this.engine.useHammer(...cell);
     await this.playSteps(res.steps);
     this.afterTurn();
+  }
+  // 움직일 수 없는 칸을 건드렸을 때 이유를 알려준다 (같은 종류는 레벨당 한 번)
+  explainBlocked(pos) {
+    const cl = this.engine.cell(...pos);
+    if (!cl || !cl.p) return;
+    const key = cl.cover ? cl.cover.t : cl.p.k;
+    const msg = t(`blocked.${key}`);
+    if (!msg || msg === `blocked.${key}`) return;
+    this.explained = this.explained || new Set();
+    if (this.explained.has(key)) return;
+    this.explained.add(key);
+    toast(this, msg, BOARD_TOP + 40);
   }
   shake(cell) {
     const sp = this.pieceAt(cell); if (!sp) return;
@@ -414,6 +433,7 @@ export class GameScene extends Phaser.Scene {
     for (const st of steps) {
       await this.playStep(st);
       this.updateHUD(st);
+      if (st.score !== undefined) this.lastScore = st.score;
     }
   }
 
@@ -511,10 +531,11 @@ export class GameScene extends Phaser.Scene {
     }
     if (st.created.length) audio.play('sfx_special_create');
     this.handleHits(st.hits);
-    for (const g of st.groups) {
-      const n = g.cells.length;
-      const cx = g.cells.reduce((a, [r, c]) => a + this.xy(r, c).x, 0) / n, cy = g.cells.reduce((a, [r, c]) => a + this.xy(r, c).y, 0) / n;
-      this.floatText({ x: cx, y: cy }, `${n * 60 * st.level}`);
+    const gained = st.score - (this.lastScore ?? 0);
+    if (gained > 0 && st.groups.length) {
+      const all = st.groups.flatMap(g => g.cells);
+      const cx = all.reduce((a, [r, c]) => a + this.xy(r, c).x, 0) / all.length, cy = all.reduce((a, [r, c]) => a + this.xy(r, c).y, 0) / all.length;
+      this.floatText({ x: cx, y: cy }, `${gained}`);
     }
     if (st.level >= 2) this.comboText(st.level);
     await wait(this, 220 / this.speed);
@@ -702,6 +723,7 @@ export class GameScene extends Phaser.Scene {
     this.updateHUD({ score: s.score, moves: s.moves, goals: s.goals.map(g => g.progress) });
     if (s.status === 'win') return this.winSequence();
     if (s.status === 'lose') return this.loseSequence();
+    if (this.pendingPause) { this.pendingPause = false; this.busy = false; this.pausePopup(); return; }
     if (s.moves === 5) { audio.play('sfx_moves_low'); this.tweens.add({ targets: this.movesBox, scale: 1.15, yoyo: true, repeat: 2, duration: 150 }); }
     this.busy = false;
     this.scheduleHint();
@@ -717,8 +739,15 @@ export class GameScene extends Phaser.Scene {
       const bonus = this.bigText('txt_bonus_time', BOARD_TOP + 60);
       this.tweens.add({ targets: bonus, alpha: 0, delay: 900, duration: 300, onComplete: () => bonus.destroy() });
       this.speed = 1.8;
+      const skip = this.add.text(W / 2, this.boardBottom + 30, t('tapSkip'), { ...TXT.small, fontSize: '32px' }).setOrigin(0.5).setDepth(60);
+      this.tweens.add({ targets: skip, alpha: 0.4, yoyo: true, repeat: -1, duration: 450 });
+      const fast = () => { this.tweens.timeScale = 4; this.time.timeScale = 4; this.anims.globalTimeScale = 4; skip.setText('▶▶'); };
+      this.input.once('pointerdown', fast);
       const steps = this.engine.bonusRound();
       await this.playSteps(steps);
+      this.input.off('pointerdown', fast);
+      this.tweens.timeScale = 1; this.time.timeScale = 1; this.anims.globalTimeScale = 1;
+      skip.destroy();
       this.speed = 1;
       this.syncAll();
       this.updateHUD({ score: this.engine.s.score, moves: 0 });
@@ -818,7 +847,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   pausePopup() {
-    if (this.busy && !this.armed) return;
+    if (this.engine.s.status !== 'play') return;
+    if (this.busy && !this.armed) { this.pendingPause = true; return; }   // 애니메이션이 끝나면 바로 연다
     this.resetHint();
     const wasBusy = this.busy; this.busy = true;
     const d = load();

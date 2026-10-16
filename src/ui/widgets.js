@@ -68,7 +68,7 @@ export function popup(scene, { title, width = 900, height = 1100, onClose, close
 }
 
 export function toast(scene, msg, y = H * 0.45) {
-  const t = scene.add.text(W / 2, y, msg, { ...TXT.mid, align: 'center' }).setOrigin(0.5).setDepth(2000);
+  const t = scene.add.text(W / 2, y, msg, { ...TXT.mid, fontSize: '42px', align: 'center', wordWrap: { width: W - 120, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(2000);
   t.setScale(0.6); t.alpha = 0;
   scene.tweens.add({ targets: t, scale: 1, alpha: 1, duration: 200, ease: 'Back.Out' });
   scene.tweens.add({ targets: t, alpha: 0, y: y - 80, delay: 1300, duration: 400, onComplete: () => t.destroy() });

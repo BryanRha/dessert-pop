@@ -86,17 +86,11 @@ export const TUNING = {
   ]
  },
  "7": {
-  "moves": 25,
+  "moves": 29,
   "stars": [
-   13000,
-   25500,
-   31500
-  ],
-  "goals": [
-   {
-    "type": "cover",
-    "count": 11
-   }
+   15500,
+   31000,
+   40500
   ]
  },
  "8": {
@@ -108,22 +102,11 @@ export const TUNING = {
   ]
  },
  "9": {
-  "moves": 25,
+  "moves": 29,
   "stars": [
    15000,
-   25500,
-   32000
-  ],
-  "goals": [
-   {
-    "type": "cover",
-    "count": 11
-   },
-   {
-    "type": "collect",
-    "color": "green",
-    "count": 19
-   }
+   28500,
+   35500
   ]
  },
  "10": {
@@ -144,51 +127,27 @@ export const TUNING = {
   ]
  },
  "11": {
-  "moves": 22,
+  "moves": 20,
   "stars": [
-   11000,
-   21500,
-   29500
-  ],
-  "goals": [
-   {
-    "type": "clear",
-    "what": "stone",
-    "count": 12
-   }
+   12500,
+   23000,
+   31000
   ]
  },
  "12": {
-  "moves": 25,
+  "moves": 26,
   "stars": [
    17000,
-   29500,
-   37000
-  ],
-  "goals": [
-   {
-    "type": "clear",
-    "what": "crate",
-    "count": 15
-   },
-   {
-    "type": "jelly"
-   }
+   34000,
+   44500
   ]
  },
  "13": {
-  "moves": 25,
+  "moves": 19,
   "stars": [
-   10000,
-   25000,
-   33000
-  ],
-  "goals": [
-   {
-    "type": "clear",
-    "what": "slime",
-    "count": 2
-   }
+   10500,
+   21500,
+   30000
   ]
  },
  "14": {
@@ -211,44 +170,22 @@ export const TUNING = {
    16000,
    29500,
    36000
-  ],
-  "goals": [
-   {
-    "type": "star",
-    "count": 16
-   }
   ]
  },
  "16": {
-  "moves": 23,
+  "moves": 22,
   "stars": [
-   13500,
-   25500,
-   33000
-  ],
-  "goals": [
-   {
-    "type": "jelly"
-   },
-   {
-    "type": "cover",
-    "count": 2
-   }
+   12500,
+   27500,
+   41000
   ]
  },
  "17": {
-  "moves": 17,
+  "moves": 29,
   "stars": [
-   9000,
-   24000,
-   34500
-  ],
-  "goals": [
-   {
-    "type": "clear",
-    "what": "slime",
-    "count": 2
-   }
+   18500,
+   40000,
+   55000
   ]
  },
  "18": {
@@ -266,41 +203,19 @@ export const TUNING = {
   ]
  },
  "19": {
-  "moves": 25,
+  "moves": 23,
   "stars": [
-   20500,
-   40000,
-   48500
-  ],
-  "goals": [
-   {
-    "type": "clear",
-    "what": "stone",
-    "count": 12
-   },
-   {
-    "type": "clear",
-    "what": "crate",
-    "count": 10
-   }
+   25000,
+   41500,
+   56000
   ]
  },
  "20": {
-  "moves": 28,
+  "moves": 18,
   "stars": [
-   25500,
-   53000,
-   67500
-  ],
-  "goals": [
-   {
-    "type": "jelly"
-   },
-   {
-    "type": "clear",
-    "what": "slime",
-    "count": 5
-   }
+   22000,
+   37500,
+   46000
   ]
  },
  "21": {
@@ -319,22 +234,11 @@ export const TUNING = {
   ]
  },
  "22": {
-  "moves": 25,
+  "moves": 29,
   "stars": [
-   11500,
-   19000,
+   11000,
+   18500,
    24500
-  ],
-  "goals": [
-   {
-    "type": "cover",
-    "count": 37
-   },
-   {
-    "type": "collect",
-    "color": "orange",
-    "count": 19
-   }
   ]
  },
  "23": {
@@ -366,11 +270,11 @@ export const TUNING = {
   ]
  },
  "25": {
-  "moves": 23,
+  "moves": 28,
   "stars": [
-   17000,
-   35000,
-   49500
+   22000,
+   39000,
+   53500
   ],
   "goals": [
    {
@@ -379,27 +283,16 @@ export const TUNING = {
    },
    {
     "type": "clear",
-    "what": "crate",
-    "count": 10
+    "what": "crate"
    }
   ]
  },
  "26": {
-  "moves": 22,
+  "moves": 15,
   "stars": [
-   15500,
-   29000,
-   35000
-  ],
-  "goals": [
-   {
-    "type": "star",
-    "count": 7
-   },
-   {
-    "type": "cover",
-    "count": 17
-   }
+   10500,
+   19000,
+   25000
   ]
  },
  "27": {
@@ -426,30 +319,19 @@ export const TUNING = {
    18500,
    38000,
    51500
-  ],
-  "goals": [
-   {
-    "type": "jelly"
-   },
-   {
-    "type": "clear",
-    "what": "stone",
-    "count": 10
-   }
   ]
  },
  "29": {
   "moves": 25,
   "stars": [
    20500,
-   41500,
-   56000
+   37500,
+   55000
   ],
   "goals": [
    {
     "type": "clear",
-    "what": "slime",
-    "count": 4
+    "what": "slime"
    },
    {
     "type": "drop",

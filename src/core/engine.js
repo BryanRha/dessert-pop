@@ -75,9 +75,11 @@ export class Engine {
     // 목표 총량 계산 (jelly / clear 계열은 레벨 시작 시점 기준)
     for (const g of s.goals) {
       if (g.type === 'jelly') g.target = this.countWhere(cell => cell.jelly > 0, cell => cell.jelly);
-      if (g.type === 'clear') g.target = g.count || this.countWhere(cell => cell.p && cell.p.k === g.what, cell => cell.p.hp || 1);
-      if (g.type === 'cover') g.target = g.count || this.countWhere(cell => cell.cover, cell => cell.cover.hp);
-      if (g.type === 'drop' || g.type === 'collect' || g.type === 'star') g.target = g.count;
+      // 장애물·덮개·별 코인은 항상 "보드 위 전부"를 개수로 센다 (일부만 깨도 클리어되는 혼란 방지)
+      if (g.type === 'clear') g.target = this.countWhere(cell => cell.p && cell.p.k === g.what);
+      if (g.type === 'cover') g.target = this.countWhere(cell => cell.cover);
+      if (g.type === 'star') g.target = this.countWhere(cell => cell.p && cell.p.k === 'star');
+      if (g.type === 'drop' || g.type === 'collect') g.target = g.count;
       if (g.type === 'score') g.target = s.stars[0];
     }
     this.fillInitial();
@@ -399,8 +401,7 @@ export class Engine {
     }
     if (cl.cover) {
       cl.cover.hp--; rec.cover = { t: cl.cover.t, hp: cl.cover.hp };
-      this.addGoal('cover');
-      if (cl.cover.hp <= 0) cl.cover = null;
+      if (cl.cover.hp <= 0) { cl.cover = null; this.addGoal('cover'); }   // 완전히 깨졌을 때 1개
       this.scoreAdd(SCORE.cover);
       return rec;
     }
@@ -413,9 +414,9 @@ export class Engine {
       cl.p = null;
     } else if (p.k === 'stone' || p.k === 'crate') {
       p.hp--; rec.damaged = p.id; rec.kind = p.k; rec.hp = p.hp;
-      this.addGoal('clear', 1, g => g.what === p.k); this.scoreAdd(SCORE.blocker);
+      this.scoreAdd(SCORE.blocker);
       if (p.hp <= 0) {
-        rec.removed = p.id; cl.p = null;
+        rec.removed = p.id; cl.p = null; this.addGoal('clear', 1, g => g.what === p.k);   // 완전히 부서졌을 때 1개
         if (cl.jelly > 0) { cl.jelly--; rec.jelly = cl.jelly; this.addGoal('jelly'); this.scoreAdd(SCORE.jelly); } // 깔려 있던 젤리도 함께
       }
     } else if (p.k === 'slime') {
@@ -583,7 +584,10 @@ export class Engine {
     if (consumedMove) {
       // 녹은 초콜릿 번짐: 이번 턴에 하나도 안 없앴으면 인접 블록 하나를 덮음
       const slimes = []; this.each((cl, r, c) => { if (cl.p && cl.p.k === 'slime') slimes.push([r, c]); });
-      if (slimes.length && !this.turnState.slimeHit) {
+      // 2턴 연속으로 하나도 못 없앴을 때만 번진다 (매 턴 번지면 구석의 초콜릿이 지나치게 가혹함)
+      s.slimeIdle = this.turnState.slimeHit ? 0 : (s.slimeIdle || 0) + 1;
+      if (slimes.length && s.slimeIdle >= 2) {
+        s.slimeIdle = 0;
         const cand = [];
         for (const [r, c] of slimes) for (const [y, x] of this.neighbors(r, c)) {
           const cl = this.cell(y, x); if (cl.p && cl.p.k === 'tile' && !cl.p.sp && !cl.cover) cand.push([[r, c], [y, x]]);
