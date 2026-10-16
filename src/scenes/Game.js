@@ -7,7 +7,17 @@ import { audio } from '../audio.js';
 import { load, save, recordWin, addCoins, addBooster, spendCoins, useBooster } from '../save.js';
 import { button, iconButton, popup, toast, starsRow } from '../ui/widgets.js';
 
-const BOARD_TOP = 420;
+const BOARD_TOP = 436;
+// 별 게이지: 별 3개를 같은 간격에 두고, 점수는 별 사이 구간별로 선형 보간 (기준 점수 간격이 달라도 보기 좋게)
+const STAR_POS = [0.3, 0.62, 0.94];
+function starProgress(score, th) {
+  const pts = [[0, 0], [th[0], STAR_POS[0]], [th[1], STAR_POS[1]], [th[2], STAR_POS[2]], [th[2] * 1.15, 1]];
+  for (let i = 1; i < pts.length; i++) {
+    const [s0, p0] = pts[i - 1], [s1, p1] = pts[i];
+    if (score <= s1) return p0 + (p1 - p0) * Math.max(0, (score - s0) / Math.max(1, s1 - s0));
+  }
+  return 1;
+}
 const wait = (scene, ms) => new Promise(res => scene.time.delayedCall(ms, res));
 const tweenP = (scene, cfg) => new Promise(res => scene.tweens.add({ ...cfg, onComplete: () => { cfg.onDone && cfg.onDone(); res(); } }));
 
@@ -202,21 +212,27 @@ export class GameScene extends Phaser.Scene {
       this.goalViews.push({ g, icon, txt, check, x, y });
     });
     // 점수 바
-    // 물결 아래: 왼쪽 레벨 · 가운데 점수 · 그 아래 점수 바
-    const BAR_Y = 352;
-    this.add.text(150, 300, `${t('level')} ${this.levelId}`, { ...TXT.small, fontSize: '32px' }).setOrigin(0.5).setDepth(21);
-    this.add.image(W / 2, BAR_Y, 'hud_score_bar_bg').setDisplaySize(620, 52).setDepth(20);
-    this.scoreFill = this.add.image(W / 2 - 310, BAR_Y, 'hud_score_bar_fill').setOrigin(0, 0.5).setDisplaySize(620, 52).setDepth(21);
+    // 물결 아래 상태 패널: [레벨 | 점수 + 별 게이지] 를 하나로 묶는다
+    const PY = 336;
+    this.add.nineslice(W / 2, PY, 'hud_goal_box', null, 900, 124, 40, 40, 40, 40).setDepth(20);
+    this.add.text(170, PY - 22, t('level'), { ...TXT.dark, fontSize: '26px' }).setOrigin(0.5).setDepth(21);
+    this.add.text(170, PY + 18, `${this.levelId}`, { ...TXT.dark, fontSize: '48px' }).setOrigin(0.5).setDepth(21);
+    const div = this.add.graphics().setDepth(21);
+    div.lineStyle(4, 0xC98A5E, 0.6).lineBetween(250, PY - 40, 250, PY + 40);
+    this.add.text(285, PY - 26, t('score'), { ...TXT.dark, fontSize: '26px' }).setOrigin(0, 0.5).setDepth(21);
+    this.scoreText = this.add.bitmapText(352, PY - 26, 'font_num_gold', '0', 40).setOrigin(0, 0.5).setDepth(22);
+    // 별 게이지: 별은 같은 간격(STAR_POS)에 두고, 게이지는 별 사이 구간별로 차오른다
+    const BX = 285, BWID = 670, BAR_Y = PY + 22;
+    this.add.image(BX + BWID / 2, BAR_Y, 'hud_score_bar_bg').setDisplaySize(BWID, 40).setDepth(21);
+    this.scoreFill = this.add.image(BX, BAR_Y, 'hud_score_bar_fill').setOrigin(0, 0.5).setDisplaySize(BWID, 40).setDepth(21);
     this.scoreFillW = this.scoreFill.width;
     this.scoreFill.setCrop(0, 0, 0, this.scoreFill.height);
     this.scoreStars = s.stars.map((th, i) => {
-      // 별 표시는 바 양 끝 테두리 안쪽으로 (끝 캡과 겹치지 않게)
-      const x = Phaser.Math.Clamp(W / 2 - 310 + 620 * Math.min(1, th / s.stars[2]), W / 2 - 310 + 34, W / 2 + 310 - 34);
-      const off = this.add.image(x, BAR_Y, 'hud_score_star_off').setScale(0.5).setDepth(22);
-      const on = this.add.image(x, BAR_Y, 'hud_score_star_on').setScale(0.5).setDepth(22).setVisible(false);
+      const x = BX + BWID * STAR_POS[i];
+      const off = this.add.image(x, BAR_Y, 'hud_score_star_off').setScale(0.46).setDepth(22);
+      const on = this.add.image(x, BAR_Y, 'hud_score_star_on').setScale(0.46).setDepth(22).setVisible(false);
       return { off, on, th };
     });
-    this.scoreText = this.add.bitmapText(W / 2, 302, 'font_num_gold', '0', 44).setOrigin(0.5).setDepth(22);
     this.updateHUD({ score: s.score, moves: s.moves, goals: s.goals.map(g => g.progress) });
   }
 
@@ -241,7 +257,7 @@ export class GameScene extends Phaser.Scene {
     if (snap.moves !== undefined) this.movesText.setText(`${Math.max(0, snap.moves)}`);
     if (snap.score !== undefined) {
       this.scoreText.setText(snap.score.toLocaleString('en-US'));
-      const ratio = Math.min(1, snap.score / s.stars[2]);
+      const ratio = starProgress(snap.score, s.stars);
       this.tweens.addCounter({ from: this.fillRatio || 0, to: ratio, duration: 250, onUpdate: tw => { this.fillRatio = tw.getValue(); this.scoreFill.setCrop(0, 0, this.scoreFillW * this.fillRatio, this.scoreFill.height); } });
       for (const st of this.scoreStars) {
         if (snap.score >= st.th && !st.on.visible) { st.on.setVisible(true).setScale(0); this.tweens.add({ targets: st.on, scale: 0.55, duration: 300, ease: 'Back.Out' }); }
@@ -797,8 +813,8 @@ export class GameScene extends Phaser.Scene {
     const fill = this.add.image(bx, by, 'hud_score_bar_fill').setOrigin(0, 0.5).setDisplaySize(BW, 44);
     const fw = fill.width; fill.setCrop(0, 0, 0, fill.height);
     B.add(fill);
-    const marks = th.map(v => {
-      const x = Phaser.Math.Clamp(bx + BW * Math.min(1, v / th[2]), bx + 30, bx + BW - 30);
+    const marks = th.map((v, i) => {
+      const x = bx + BW * STAR_POS[i];
       const off = this.add.image(x, by, 'hud_score_star_off').setScale(0.45);
       const on = this.add.image(x, by, 'hud_score_star_on').setScale(0.45).setVisible(false);
       B.add([off, on]);
@@ -828,7 +844,7 @@ export class GameScene extends Phaser.Scene {
         onUpdate: tw => {
           const v = Math.round(tw.getValue());
           sc.setText(v.toLocaleString('en-US'));
-          fill.setCrop(0, 0, fw * Math.min(1, v / th[2]), fill.height);
+          fill.setCrop(0, 0, fw * starProgress(v, th), fill.height);
           while (shown < stars && v >= th[shown]) { popStar(shown); shown++; }
         },
         onComplete: () => { while (shown < stars) { popStar(shown); shown++; } showRewards(); },
