@@ -42,7 +42,7 @@ game/
 ├─ assets/                    ← tools/sync.js 가 ../assets 에서 복사 (직접 수정 금지)
 └─ src/
    ├─ core/engine.js          게임 규칙 엔진 (화면과 무관, Node 에서도 실행)
-   ├─ core/levels.js          레벨 30개 정의
+   ├─ core/levels.js          레벨 1~30 정의 (+ levels_more.js 31~100)
    ├─ core/levels_tuning.js   봇 시뮬레이션으로 정한 이동 수·별 기준 (자동 생성)
    ├─ scenes/                 Boot(로딩) · Title · Map · Game
    ├─ ui/widgets.js           버튼·팝업·토스트
@@ -82,19 +82,21 @@ node tools/sync.js       # ../assets 빌드 결과를 game/assets 로 동기화
 헤드리스 Chrome 으로 한 번에 돌리기 (`puppeteer-core` 가 설치된 폴더에 `tools/browser/*` 를 복사해서 실행):
 
 ```bash
-node e2e.mjs http://localhost:8080 1 30 ./shots   # 전 레벨 자동 플레이 + 레벨별 스크린샷
+node e2e.mjs http://localhost:8080 1 100 ./shots   # 전 레벨 자동 플레이 + 레벨별 스크린샷
 node flow.mjs ./shots                              # 첫 실행 흐름(타이틀→지도→튜토리얼→일시정지) 스크린샷
 ```
 
 ### 레벨 추가하기
 
-`src/core/levels.js` 의 `RAW` 배열에 항목을 추가한다. 문자 규칙은 `engine.js` 상단 주석 참고.
+레벨 1~30 은 `src/core/levels.js` 의 `RAW`, 31~100 은 `src/core/levels_more.js` 의 `MORE` 배열.
+31 이후는 좌표 함수로 모양을 만든다 (`L({ w, h, hole, piece, jelly, cover })`). 문자 규칙은 `engine.js` 상단 주석 참고.
 
 ```js
-{ id: 31, moves: 25, colors: 5, layout: fill(8, 8), goals: [{ type: 'jelly' }], jelly: fill(8, 8, '1') }
+L({ id: 101, goals: [{ type: 'jelly' }], jelly: (x, y) => (y >= 6 ? '1' : null) })
 ```
 
-추가 후 `node tools/tune.js` 를 돌리면 이동 수와 별 기준이 자동으로 맞춰진다.
+추가 후 `node tools/tune.js 60 101` 을 돌리면 이동 수·목표량·별 기준이 자동으로 맞춰진다.
+월드를 늘리면 `config.js` 의 `WORLD_COUNT`·`MAP_THEME`, `i18n.js` 의 `worldName`, `gen_sea_scenes.py` 의 `WORLDS`(게임 배경)를 함께 늘린다.
 월드 맵은 10레벨 단위로 월드가 바뀐다 (`WORLD_OF`).
 
 ### 리소스 수정하기

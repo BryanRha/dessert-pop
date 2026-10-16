@@ -1,5 +1,5 @@
 // 인게임: 엔진(core/engine.js)이 만든 steps 를 순서대로 애니메이션으로 재생한다.
-import { W, H, CELL, TXT, COLOR_HEX, COLOR_NAMES, BOOSTER_PRICE } from '../config.js';
+import { W, H, CELL, TXT, COLOR_HEX, COLOR_NAMES, BOOSTER_PRICE, asset } from '../config.js';
 import { Engine } from '../core/engine.js';
 import { LEVELS } from '../core/levels.js';
 import { t } from '../i18n.js';
@@ -39,6 +39,13 @@ export class GameScene extends Phaser.Scene {
     this.pendingPause = false;
     this.explained = new Set();
   }
+  preload() {
+    // 이 월드 배경만 메모리에 둔다 (10개 월드 배경을 한꺼번에 올리면 폰 GPU 메모리가 부족)
+    const key = `bg_game_${this.level.world}`;
+    for (const k of this.textures.getTextureKeys()) if (k.startsWith('bg_game_') && k !== key) this.textures.remove(k);
+    if (!this.textures.exists(key)) this.load.image(key, asset(`assets/img/${key}.png`));
+  }
+
 
   create() {
     const s = this.engine.s;

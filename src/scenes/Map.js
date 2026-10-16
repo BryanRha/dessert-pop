@@ -1,5 +1,5 @@
-// 월드맵: 3개 월드를 세로로 이어 붙이고, 30개 레벨 노드를 구불구불한 길로 연결한다.
-import { W, H, TXT, INK } from '../config.js';
+// 월드맵: 10개 월드를 세로로 이어 붙이고, 100개 레벨 노드를 구불구불한 길로 연결한다.
+import { W, H, TXT, INK, WORLD_COUNT, MAP_THEME } from '../config.js';
 import { t } from '../i18n.js';
 import { audio } from '../audio.js';
 import { load, save, totalStars } from '../save.js';
@@ -7,7 +7,7 @@ import { LEVELS } from '../core/levels.js';
 import { popup, button, iconButton, toast } from '../ui/widgets.js';
 
 const WORLD_H = 3840;
-const WORLDS = 3;
+const WORLDS = WORLD_COUNT;
 const TOTAL_H = WORLD_H * WORLDS;
 const DECOS = ['bubbles', 'jellyfish', 'coral_tree', 'coral_fan', 'kelp', 'shell', 'anchor', 'chest', 'rock', 'urchin'];
 
@@ -48,9 +48,9 @@ export class MapScene extends Phaser.Scene {
     const d = load();
     this.cameras.main.setBounds(0, 0, W, TOTAL_H);
     // 배경 (아래가 월드 1)
+    this.bgLayers = [];
     for (let w = 1; w <= WORLDS; w++) {
-      const img = this.add.image(W / 2, (WORLDS - w) * WORLD_H + WORLD_H / 2, `map_world_${w}`);
-      img.setDisplaySize(W, WORLD_H);
+      this.bgLayers.push(this.drawWorld(w));
       const banner = this.add.image(W / 2, (WORLDS - w + 1) * WORLD_H - 120, 'popup_ribbon').setDisplaySize(760, 170).setDepth(3);
       this.add.text(W / 2, banner.y - 8, `${w}. ${t('worldName')[w - 1]}`, { ...TXT.mid, stroke: '#0B3E8A' }).setOrigin(0.5).setDepth(4);
     }
@@ -66,7 +66,7 @@ export class MapScene extends Phaser.Scene {
       }
     }
     const nodes = LEVELS.map(l => nodePos(l.id));
-    const banners = [1, 2, 3].map(w => (WORLDS - w + 1) * WORLD_H - 120);
+    const banners = Array.from({ length: WORLDS }, (_, i) => (WORLDS - i) * WORLD_H - 120);
     // 노드(번호 + 아래 별 줄)와 배너 영역은 비워 둔다
     const nearNode = (x, y, pad = 0) => nodes.some(n => Math.abs(x - n.x) < 100 + pad && y > n.y - 110 - pad && y < n.y + 135 + pad);
     const nearBanner = (x, y, pad = 0) => banners.some(by => Math.abs(y - by) < 100 + pad && Math.abs(x - W / 2) < 420 + pad);
@@ -148,7 +148,37 @@ export class MapScene extends Phaser.Scene {
     if (data.celebrate && d.unlocked > LEVELS.length) toast(this, t('allClear'));
   }
 
+  // 월드 한 칸 배경: 위→아래 그라데이션 + 모래·물빛 무늬 + 물결 + 물방울 (화면 밖 월드는 update 에서 숨김)
+  drawWorld(w) {
+    const [top, bottom, patch] = MAP_THEME[(w - 1) % MAP_THEME.length].map(c => Phaser.Display.Color.HexStringToColor(c).color);
+    const y0 = (WORLDS - w) * WORLD_H;
+    const g = this.add.graphics();
+    g.fillGradientStyle(top, top, bottom, bottom, 1).fillRect(0, y0, W, WORLD_H);
+    const rnd = new Phaser.Math.RandomDataGenerator([`world-${w}`]);
+    g.fillStyle(patch, 0.45);
+    for (let i = 0; i < 12; i++) {
+      const rx = 120 + rnd.frac() * 160;
+      g.fillEllipse(rnd.pick([rnd.frac() * 200 - 40, W - rnd.frac() * 200 + 40]), y0 + 200 + rnd.frac() * (WORLD_H - 400), rx * 2, rx * 1.1);
+    }
+    g.lineStyle(6, 0xffffff, 0.3);
+    for (let i = 0; i < 26; i++) {
+      const x = 40 + rnd.frac() * (W - 200), y = y0 + 80 + rnd.frac() * (WORLD_H - 160);
+      g.beginPath(); g.moveTo(x, y);
+      for (let k = 1; k <= 8; k++) g.lineTo(x + k * 20, y + Math.sin(k * Math.PI / 4) * 10);
+      g.strokePath();
+    }
+    for (let i = 0; i < 40; i++) {
+      const x = 40 + rnd.frac() * (W - 80), y = y0 + 60 + rnd.frac() * (WORLD_H - 120), r = 6 + rnd.frac() * 16;
+      g.lineStyle(3, 0xffffff, 0.6).strokeCircle(x, y, r);
+      g.fillStyle(0xffffff, 0.6).fillCircle(x - r * 0.35, y - r * 0.35, r * 0.22);
+    }
+    g.y0 = y0;
+    return g;
+  }
+
   update() {
+    const cam = this.cameras.main;
+    for (const g of this.bgLayers || []) g.setVisible(g.y0 < cam.scrollY + H && g.y0 + WORLD_H > cam.scrollY);
     if (!this.input.activePointer.isDown && Math.abs(this.vel) > 0.5) {
       this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + this.vel, 0, TOTAL_H - H);
       this.vel *= 0.92;

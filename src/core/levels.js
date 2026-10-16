@@ -1,11 +1,12 @@
 // 레벨 데이터. 문자 규칙은 engine.js 상단 주석 참고.
 // stars / moves 는 tools/tune.js 가 봇 시뮬레이션으로 계산한 levels_tuning.js 값을 덮어쓴다.
 import { TUNING } from './levels_tuning.js';
+import { MORE } from './levels_more.js';
 
 const fill = (w, h, ch = '.') => Array.from({ length: h }, () => ch.repeat(w));
 
 const RAW = [
-  // ═══ 월드 1 · 딸기 정원 ═══════════════════════════════════
+  // ═══ 월드 1 · 산호초 마을 ═══════════════════════════════════
   { id: 1, moves: 18, colors: 4, layout: fill(7, 7), goals: [{ type: 'collect', color: 'red', count: 15 }],
     tutorial: { key: 'swap', hand: true } },
   { id: 2, moves: 18, colors: 4, layout: fill(8, 8), goals: [{ type: 'collect', color: 'orange', count: 20 }, { type: 'collect', color: 'green', count: 20 }],
@@ -29,7 +30,7 @@ const RAW = [
     layout: fill(9, 9), jelly: ['000000000', '000000000', '110000011', '110000011', '110000011', '110000011', '111222111', '111222111', '111111111'],
     pieces: ['....A....', ...fill(9, 8)], boss: true },
 
-  // ═══ 월드 2 · 초콜릿 강 ═══════════════════════════════════
+  // ═══ 월드 2 · 해초 숲 ═══════════════════════════════════
   { id: 11, moves: 22, colors: 5, layout: fill(8, 8), goals: [{ type: 'clear', what: 'stone' }],
     pieces: ['........', '........', '........', '........', '........', '.222222.', '........', '........'], tutorial: { key: 'stone' } },
   { id: 12, moves: 24, colors: 5, layout: fill(8, 8), goals: [{ type: 'clear', what: 'crate' }, { type: 'jelly' }],
@@ -53,7 +54,7 @@ const RAW = [
   { id: 20, moves: 32, colors: 5, layout: fill(9, 9), goals: [{ type: 'jelly' }, { type: 'clear', what: 'slime' }],
     jelly: ['000000000', '000000000', '001111100', '001111100', '001111100', '001111100', '001111100', '000000000', '000000000'], pieces: ['.........', '.........', '.........', '.........', '.........', '.........', '.........', '.........', 'm...m...m'], boss: true },
 
-  // ═══ 월드 3 · 아이스크림 설산 ═════════════════════════════
+  // ═══ 월드 3 · 깊은 바다 ═════════════════════════════
   { id: 21, moves: 24, colors: 5, layout: fill(8, 8), goals: [{ type: 'collect', color: 'blue', count: 25 }], timerSpawn: 0.04, timerMoves: 9,
     pieces: ['........', '........', '...T....', '........', '........', '........', '........', '........'], tutorial: { key: 'timer' } },
   { id: 22, moves: 24, colors: 6, layout: fill(8, 8), goals: [{ type: 'cover' }],
@@ -80,8 +81,8 @@ const RAW = [
     cover: ['.........', '.........', '.........', '.i.i.i.i.', '.........', 'k.k.k.k.k', '.........', '.........', '.........'], dropSpawn: { chance: 0.3, maxOnBoard: 1 }, boss: true },
 ];
 
-export const WORLD_OF = id => (id <= 10 ? 1 : id <= 20 ? 2 : 3);
+export const WORLD_OF = id => Math.ceil(id / 10);
 
 // 원본 정의 (튜너는 이걸로 시작) / 튜닝 결과를 덮어쓴 실제 게임용 레벨
-export const BASE_LEVELS = RAW.map(l => ({ world: WORLD_OF(l.id), stars: [1500, 3000, 4500], ...l }));
+export const BASE_LEVELS = [...RAW, ...MORE].map(l => ({ world: WORLD_OF(l.id), stars: [1500, 3000, 4500], ...l }));
 export const LEVELS = BASE_LEVELS.map(l => ({ ...l, ...(TUNING[l.id] || {}) }));
