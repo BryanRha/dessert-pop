@@ -7,7 +7,7 @@ import { audio } from '../audio.js';
 import { load, save, recordWin, addCoins, addBooster, spendCoins, useBooster } from '../save.js';
 import { button, iconButton, popup, toast, starsRow } from '../ui/widgets.js';
 
-const BOARD_TOP = 390;
+const BOARD_TOP = 420;
 const wait = (scene, ms) => new Promise(res => scene.time.delayedCall(ms, res));
 const tweenP = (scene, cfg) => new Promise(res => scene.tweens.add({ ...cfg, onComplete: () => { cfg.onDone && cfg.onDone(); res(); } }));
 
@@ -178,14 +178,14 @@ export class GameScene extends Phaser.Scene {
   // ═══ HUD ═══════════════════════════════════════════════════
   buildHUD() {
     const s = this.engine.s;
-    this.add.image(W / 2, 0, 'hud_topbar').setOrigin(0.5, 0).setDepth(20);
+    // 상단 바를 세로로 늘려서 원·목표 칸이 아래 물결 테두리에 걸치지 않게 한다 (물결은 y≈220 부터)
+    this.add.image(W / 2, 0, 'hud_topbar').setOrigin(0.5, 0).setDisplaySize(W, 300).setDepth(20);
     // 이동 수: 라벨과 숫자 모두 안쪽 크림 원 안에 (테두리와 겹치지 않게)
-    const mb = this.add.image(140, 126, 'hud_moves_box').setScale(0.95).setDepth(20);
+    const mb = this.add.image(140, 112, 'hud_moves_box').setScale(0.82).setDepth(20);
     this.movesBox = mb;
-    this.add.text(140, 96, t('moves'), { ...TXT.dark, fontSize: '26px' }).setOrigin(0.5).setDepth(21);
-    this.movesText = this.add.bitmapText(140, 146, 'font_num_white', `${s.moves}`, 64).setOrigin(0.5).setDepth(21);
-    this.add.text(140, 268, `${t('level')} ${this.levelId}`, { ...TXT.small, fontSize: '32px' }).setOrigin(0.5).setDepth(21);
-    iconButton(this, W - 86, 92, 'ico_settings', () => this.pausePopup(), { size: 116 }).setDepth(22);
+    this.add.text(140, 88, t('moves'), { ...TXT.dark, fontSize: '24px' }).setOrigin(0.5).setDepth(21);
+    this.movesText = this.add.bitmapText(140, 130, 'font_num_white', `${s.moves}`, 56).setOrigin(0.5).setDepth(21);
+    iconButton(this, W - 86, 100, 'ico_settings', () => this.pausePopup(), { size: 112 }).setDepth(22);
 
     // 목표
     this.goalViews = [];
@@ -193,16 +193,18 @@ export class GameScene extends Phaser.Scene {
     const span = 600, startX = 300 + (span - goals.length * 170) / 2 + 85;
     goals.forEach((g, i) => {
       // 목표 칸: 아이콘은 위, 남은 개수는 칸 안쪽 아래 (테두리와 겹치지 않게)
-      const x = startX + i * 170, y = 118;
-      this.add.nineslice(x, y, 'hud_goal_box', null, 152, 164, 40, 40, 40, 40).setDepth(20);
+      const x = startX + i * 170, y = 114;
+      this.add.nineslice(x, y, 'hud_goal_box', null, 150, 156, 40, 40, 40, 40).setDepth(20);
       const icon = this.add.image(x, y - 20, this.goalIcon(g)).setDepth(21);
-      icon.setScale(g.type === 'jelly' ? 0.68 : g.type === 'score' ? 1.4 : 0.62);
-      const txt = this.add.bitmapText(x, y + 46, 'font_num_white', '', 44).setOrigin(0.5).setDepth(22);
-      const check = this.add.image(x, y + 46, 'hud_goal_check').setScale(0.55).setDepth(22).setVisible(false);
+      icon.setScale(g.type === 'jelly' ? 0.64 : g.type === 'score' ? 1.3 : 0.58);
+      const txt = this.add.bitmapText(x, y + 44, 'font_num_white', '', 42).setOrigin(0.5).setDepth(22);
+      const check = this.add.image(x, y + 44, 'hud_goal_check').setScale(0.5).setDepth(22).setVisible(false);
       this.goalViews.push({ g, icon, txt, check, x, y });
     });
     // 점수 바
-    const BAR_Y = 304;
+    // 물결 아래: 왼쪽 레벨 · 가운데 점수 · 그 아래 점수 바
+    const BAR_Y = 352;
+    this.add.text(150, 300, `${t('level')} ${this.levelId}`, { ...TXT.small, fontSize: '32px' }).setOrigin(0.5).setDepth(21);
     this.add.image(W / 2, BAR_Y, 'hud_score_bar_bg').setDisplaySize(620, 52).setDepth(20);
     this.scoreFill = this.add.image(W / 2 - 310, BAR_Y, 'hud_score_bar_fill').setOrigin(0, 0.5).setDisplaySize(620, 52).setDepth(21);
     this.scoreFillW = this.scoreFill.width;
@@ -214,7 +216,7 @@ export class GameScene extends Phaser.Scene {
       const on = this.add.image(x, BAR_Y, 'hud_score_star_on').setScale(0.5).setDepth(22).setVisible(false);
       return { off, on, th };
     });
-    this.scoreText = this.add.bitmapText(W / 2, 252, 'font_num_gold', '0', 40).setOrigin(0.5).setDepth(22);
+    this.scoreText = this.add.bitmapText(W / 2, 302, 'font_num_gold', '0', 44).setOrigin(0.5).setDepth(22);
     this.updateHUD({ score: s.score, moves: s.moves, goals: s.goals.map(g => g.progress) });
   }
 
@@ -252,7 +254,7 @@ export class GameScene extends Phaser.Scene {
         const left = g.type === 'score' ? Math.max(0, g.target - snap.score) : Math.max(0, g.target - prog);
         const done = left <= 0;
         v.txt.setText(done ? '' : g.type === 'score' ? `${Math.ceil(left / 1000)}k` : `${left}`);
-        if (done && !v.check.visible) { v.check.setVisible(true).setScale(0); this.tweens.add({ targets: v.check, scale: 0.55, duration: 280, ease: 'Back.Out' }); }
+        if (done && !v.check.visible) { v.check.setVisible(true).setScale(0); this.tweens.add({ targets: v.check, scale: 0.5, duration: 280, ease: 'Back.Out' }); }
         if (v.lastLeft !== undefined && left < v.lastLeft) this.tweens.add({ targets: v.icon, scale: v.icon.scale * 1.15, yoyo: true, duration: 90 });
         v.lastLeft = left;
       });
