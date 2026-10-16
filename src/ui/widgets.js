@@ -8,7 +8,7 @@ export function button(scene, x, y, label, onClick, { kind = 'primary', width = 
   const c = scene.add.container(x, y);
   const slice = kind === 'primary' ? 70 : 56;
   const bg = scene.add.nineslice(0, 0, key, null, width, height, slice, slice, 0, 0);
-  const txt = scene.add.text(0, -8, label, { ...TXT.mid, fontSize: `${size}px`, stroke: kind === 'primary' ? '#1E6A44' : '#9A2E56' }).setOrigin(0.5);
+  const txt = scene.add.text(0, -8, label, { ...TXT.mid, fontSize: `${size}px`, stroke: kind === 'primary' ? '#8A2E08' : '#0B5E58' }).setOrigin(0.5);
   c.add([bg, txt]);
   c.setSize(width, height);
   c.setInteractive({ useHandCursor: true });
@@ -39,13 +39,13 @@ export function iconButton(scene, x, y, icon, onClick, { size = 120, bg = 'btn_i
 // 모달 팝업. 반환된 container 에 내용을 add 하고, close() 로 닫는다.
 export function popup(scene, { title, width = 900, height = 1100, onClose, closeButton = true } = {}) {
   const layer = scene.add.container(0, 0).setDepth(1000);
-  const dim = scene.add.rectangle(W / 2, H / 2, W * 2, H * 2, 0x3A1F2E, 0.55).setInteractive();
+  const dim = scene.add.rectangle(W / 2, H / 2, W * 2, H * 2, 0x06204A, 0.55).setInteractive();
   const box = scene.add.container(W / 2, H / 2);
   const panel = scene.add.nineslice(0, 0, 'popup_panel', null, width, height, 96, 96, 96, 96);
   box.add(panel);
   if (title) {
     const rib = scene.add.image(0, -height / 2 + 10, 'popup_ribbon').setDisplaySize(Math.min(width + 120, 980), 220);
-    const tt = scene.add.text(0, -height / 2 - 4, title, { ...TXT.big, stroke: '#9A2E56' }).setOrigin(0.5);
+    const tt = scene.add.text(0, -height / 2 - 4, title, { ...TXT.big, stroke: '#0B3E8A' }).setOrigin(0.5);
     box.add([rib, tt]);
   }
   layer.add([dim, box]);

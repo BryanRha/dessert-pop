@@ -17,7 +17,7 @@ export class TitleScene extends Phaser.Scene {
     const mascot = this.add.image(W * 0.78, H * 0.6, 'mascot_happy').setScale(0.55);
     this.tweens.add({ targets: mascot, y: mascot.y - 24, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.InOut' });
 
-    // 떠다니는 디저트
+    // 떠다니는 바다 친구
     const keys = ['tile_red', 'tile_orange', 'tile_yellow', 'tile_green', 'tile_blue', 'tile_purple'];
     for (let i = 0; i < 9; i++) {
       const s = this.add.image(Phaser.Math.Between(60, W - 60), Phaser.Math.Between(H * 0.3, H * 0.42), keys[i % 6]).setScale(0.6 + Math.random() * 0.4).setAlpha(0.9);
@@ -32,12 +32,12 @@ export class TitleScene extends Phaser.Scene {
     // 브라우저 자동재생 정책: 첫 터치 이후에 음악 시작
     if (this.sound.locked) this.sound.once('unlocked', () => audio.music('bgm_title'));
     else audio.music('bgm_title');
-    this.cameras.main.fadeIn(300, 255, 227, 236);
+    this.cameras.main.fadeIn(300, 189, 235, 255);
     load();
   }
 
   go() {
-    this.cameras.main.fadeOut(250, 255, 227, 236);
+    this.cameras.main.fadeOut(250, 189, 235, 255);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Map'));
   }
 }

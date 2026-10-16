@@ -9,7 +9,7 @@ import { popup, button, iconButton, toast } from '../ui/widgets.js';
 const WORLD_H = 3840;
 const WORLDS = 3;
 const TOTAL_H = WORLD_H * WORLDS;
-const DECOS = ['lollipop_tree', 'cloud', 'cupcake_house', 'donut', 'icecream', 'cake', 'macaron_tower', 'meringue_mushroom', 'flower', 'cookie_rock', 'wafer_bridge', 'candle'];
+const DECOS = ['bubbles', 'jellyfish', 'coral_tree', 'coral_fan', 'kelp', 'shell', 'anchor', 'chest', 'rock', 'urchin'];
 
 export function nodePos(id) {
   const w = Math.ceil(id / 10), k = (id - 1) % 10;
@@ -52,7 +52,7 @@ export class MapScene extends Phaser.Scene {
       const img = this.add.image(W / 2, (WORLDS - w) * WORLD_H + WORLD_H / 2, `map_world_${w}`);
       img.setDisplaySize(W, WORLD_H);
       const banner = this.add.image(W / 2, (WORLDS - w + 1) * WORLD_H - 120, 'popup_ribbon').setDisplaySize(760, 170).setDepth(3);
-      this.add.text(W / 2, banner.y - 8, `${w}. ${t('worldName')[w - 1]}`, { ...TXT.mid, stroke: '#9A2E56' }).setOrigin(0.5).setDepth(4);
+      this.add.text(W / 2, banner.y - 8, `${w}. ${t('worldName')[w - 1]}`, { ...TXT.mid, stroke: '#0B3E8A' }).setOrigin(0.5).setDepth(4);
     }
     // 길 좌표를 먼저 계산 (장식 배치와 점선 그리기에 함께 사용)
     const path = [];
@@ -71,7 +71,7 @@ export class MapScene extends Phaser.Scene {
     const nearNode = (x, y, pad = 0) => nodes.some(n => Math.abs(x - n.x) < 100 + pad && y > n.y - 110 - pad && y < n.y + 135 + pad);
     const nearBanner = (x, y, pad = 0) => banners.some(by => Math.abs(y - by) < 100 + pad && Math.abs(x - W / 2) < 420 + pad);
     // 장식: 길·노드·배너에서 충분히 떨어진 곳에만
-    const rnd = new Phaser.Math.RandomDataGenerator(['dessert-map']);
+    const rnd = new Phaser.Math.RandomDataGenerator(['ocean-map']);
     for (let w = 1; w <= WORLDS; w++) {
       let placed = 0;
       for (let tries = 0; tries < 200 && placed < 14; tries++) {
@@ -80,7 +80,7 @@ export class MapScene extends Phaser.Scene {
         if (nearNode(x, y, 90) || nearBanner(x, y, 60) || path.some(pt => Math.hypot(pt.x - x, pt.y - y) < 150)) continue;
         const key = `map_deco_${rnd.pick(DECOS)}`;
         const s = this.add.image(x, y, key).setScale(0.45 + rnd.frac() * 0.3).setAlpha(0.95);
-        if (key.includes('cloud')) { s.setAlpha(0.8); this.tweens.add({ targets: s, x: x + 30, yoyo: true, repeat: -1, duration: 4000 + rnd.frac() * 3000, ease: 'Sine.InOut' }); }
+        if (key.includes('bubbles') || key.includes('jellyfish')) { s.setAlpha(0.8); this.tweens.add({ targets: s, x: x + 30, yoyo: true, repeat: -1, duration: 4000 + rnd.frac() * 3000, ease: 'Sine.InOut' }); }
         placed++;
       }
     }
@@ -144,7 +144,7 @@ export class MapScene extends Phaser.Scene {
     this.input.on('wheel', (p, o, dx, dy) => { this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + dy, 0, TOTAL_H - H); });
 
     audio.music('bgm_map');
-    this.cameras.main.fadeIn(250, 255, 227, 236);
+    this.cameras.main.fadeIn(250, 189, 235, 255);
     if (data.celebrate && d.unlocked > LEVELS.length) toast(this, t('allClear'));
   }
 
@@ -156,7 +156,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   openLevel(id) {
-    this.cameras.main.fadeOut(220, 255, 227, 236);
+    this.cameras.main.fadeOut(220, 189, 235, 255);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Game', { levelId: id }));
   }
 }

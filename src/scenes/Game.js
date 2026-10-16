@@ -66,7 +66,7 @@ export class GameScene extends Phaser.Scene {
     this.buildBoosters();
     this.setupInput();
     audio.music(this.level.world % 2 ? 'bgm_game_1' : 'bgm_game_2');
-    this.cameras.main.fadeIn(250, 255, 227, 236);
+    this.cameras.main.fadeIn(250, 189, 235, 255);
     this.levelStartPopup();
   }
 
@@ -78,7 +78,7 @@ export class GameScene extends Phaser.Scene {
     const e = this.engine;
     const g = this.add.graphics();
     this.cellLayer.add(g);
-    g.fillStyle(0x7A0E2E, 0.18);
+    g.fillStyle(0x0B2E78, 0.18);
     e.each((cl, r, c) => g.fillRect(c * CELL, r * CELL, CELL, CELL));
     e.each((cl, r, c) => {
       const { x, y } = this.xy(r, c);
@@ -142,7 +142,7 @@ export class GameScene extends Phaser.Scene {
     cont.add(img);
     cont.img = img; cont.piece = { ...p };
     if (p.k === 'timer') {
-      cont.timerText = this.add.text(0, 8, `${p.t}`, { ...TXT.mid, fontSize: '60px', color: '#5A2A3A', stroke: '#FFF6E6', strokeThickness: 8 }).setOrigin(0.5);
+      cont.timerText = this.add.text(0, 8, `${p.t}`, { ...TXT.mid, fontSize: '60px', color: '#123A6E', stroke: '#FFF6E6', strokeThickness: 8 }).setOrigin(0.5);
       cont.add(cont.timerText);
     }
     if (cover) { cont.cover = this.add.image(0, 0, this.coverTexture(cover)); cont.add(cont.cover); }
@@ -219,7 +219,7 @@ export class GameScene extends Phaser.Scene {
     this.add.text(170, PY - 22, t('level'), { ...TXT.dark, fontSize: '26px' }).setOrigin(0.5).setDepth(21);
     this.add.text(170, PY + 18, `${this.levelId}`, { ...TXT.dark, fontSize: '48px' }).setOrigin(0.5).setDepth(21);
     const div = this.add.graphics().setDepth(21);
-    div.lineStyle(4, 0xC98A5E, 0.6).lineBetween(250, PY - 40, 250, PY + 40);
+    div.lineStyle(4, 0x2EA8E6, 0.6).lineBetween(250, PY - 40, 250, PY + 40);
     // "점수 1,234" 는 게이지 위 가운데 (점수가 늘어나도 가운데 유지 → layoutScore)
     this.scoreLabel = this.add.text(0, PY - 26, t('score'), { ...TXT.dark, fontSize: '26px' }).setOrigin(0, 0.5).setDepth(21);
     this.scoreText = this.add.bitmapText(0, PY - 26, 'font_num_gold', '0', 40).setOrigin(0, 0.5).setDepth(22);
@@ -646,7 +646,7 @@ export class GameScene extends Phaser.Scene {
         this.sprites.delete(h.removed);
         if (h.kind === 'tile') this.fx('fx_pop', x, y, { tint: h.color >= 0 ? COLOR_HEX[h.color] : 0xffffff });
         else if (h.kind === 'stone' || h.kind === 'crate') { stone = true; this.fx('fx_stone_crack', x, y, { scale: 1.2 }); }
-        else if (h.kind === 'slime') { this.fx('fx_jelly_break', x, y, { tint: 0x8B5A3C }); jelly = true; }
+        else if (h.kind === 'slime') { this.fx('fx_jelly_break', x, y, { tint: 0x4E5E1E }); jelly = true; }
         else if (h.kind === 'timer') { this.fx('fx_bomb', x, y, { scale: 0.9 }); }
         else if (h.kind === 'star') { audio.play('sfx_coin'); this.sparkles(x, y, 0xFFD23F, 10); }
         if (s) {
@@ -867,20 +867,20 @@ export class GameScene extends Phaser.Scene {
     const rewardY = 150;
     const showRewards = () => {
       if (!firstClear && score > prevBest) {
-        info.setText(t('newBest')).setColor('#E8326F');
+        info.setText(t('newBest')).setColor('#FF6A1F');
         info.setScale(2).setAlpha(0).setAngle(-8);
         this.tweens.add({ targets: info, scale: 1, alpha: 1, duration: 300, ease: 'Back.Out' });
       } else if (stars < 3) {
         info.setText(t('nextStar', (th[stars] - score).toLocaleString('en-US')));
       } else {
-        info.setText(t('perfect')).setColor('#E8326F');
+        info.setText(t('perfect')).setColor('#FF6A1F');
       }
       if (stars > prevStars && prevStars > 0) {
-        const up = this.add.text(0, info.y + info.height / 2 + 28, t('starUp', prevStars, stars), { ...TXT.small, fontSize: '30px', stroke: '#9A2E56' }).setOrigin(0.5);
+        const up = this.add.text(0, info.y + info.height / 2 + 28, t('starUp', prevStars, stars), { ...TXT.small, fontSize: '30px', stroke: '#0B3E8A' }).setOrigin(0.5);
         B.add(up);
       }
       const items = [{ icon: 'ico_coin', scale: 0.42, label: `+${coins}`, stroke: '#7A3F00', count: coins }];
-      if (gift) items.push({ icon: `boost_${gift}`, scale: 0.52, label: '+1', stroke: '#1E6A44' });
+      if (gift) items.push({ icon: `boost_${gift}`, scale: 0.52, label: '+1', stroke: '#0B3E8A' });
       const gap = 230, x0 = -((items.length - 1) * gap) / 2;
       items.forEach((it, i) => {
         const x = x0 + i * gap;
@@ -960,12 +960,12 @@ export class GameScene extends Phaser.Scene {
 
   failPopup(reason) {
     audio.play('jingle_lose');
-    const p = popup(this, { title: t('failed'), width: 900, height: 980, closeButton: false });
+    const p = popup(this, { title: t('failed'), width: 900, height: 1040, closeButton: false });
     p.box.add(this.add.image(0, -230, 'popup_deco_fail').setScale(0.55));
     p.box.add(this.add.text(0, -40, reason, TXT.body).setOrigin(0.5));
     this.goalSummary(p.box, 40);
-    p.box.add(button(this, 0, 290, t('retry'), () => this.restart(), { width: 520, height: 160, size: 60 }));
-    p.box.add(button(this, 0, 430, t('map'), () => this.toMap(), { kind: 'secondary', width: 380, height: 120, size: 42 }));
+    p.box.add(button(this, 0, 270, t('retry'), () => this.restart(), { width: 520, height: 160, size: 60 }));
+    p.box.add(button(this, 0, 405, t('map'), () => this.toMap(), { kind: 'secondary', width: 380, height: 120, size: 42 }));
   }
 
   pausePopup() {
@@ -1015,7 +1015,7 @@ export class GameScene extends Phaser.Scene {
 
   tutorialBubble(text, done) {
     const layer = this.add.container(0, 0).setDepth(900);
-    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x3A1F2E, 0.35).setInteractive();
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x06204A, 0.35).setInteractive();
     const m = this.add.image(170, H - 430, 'mascot_talk').setScale(0.3);
     const bubble = this.add.nineslice(W / 2 + 90, H - 600, 'popup_panel', null, 780, 300, 96, 96, 96, 96);
     const txt = this.add.text(bubble.x, bubble.y, text, { ...TXT.body, fontSize: '38px', wordWrap: { width: 680, useAdvancedWrap: true } }).setOrigin(0.5);

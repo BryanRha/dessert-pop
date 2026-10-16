@@ -13,7 +13,7 @@ async function start() {
     parent: 'game',
     width: W,
     height: BASE_H,
-    backgroundColor: '#FFE3EC',
+    backgroundColor: '#BDEBFF',
     transparent: false,
     // 세로로 긴 화면은 아래위를 넓혀 꽉 채우고(EXPAND), 가로로 넓은 화면은 9:16 으로 맞춤(FIT)
     scale: { mode: innerHeight / innerWidth > BASE_H / W ? Phaser.Scale.EXPAND : Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
