@@ -14,6 +14,7 @@ import { popup, button, iconButton, toast, enableGlow } from '../ui/widgets.js';
 const WORLD_H = 3840;
 const WORLDS = WORLD_COUNT;
 const TOTAL_H = WORLD_H * WORLDS;
+const DOCK_PAD = 220;   // 아래 고정 바 높이만큼 더 내려갈 수 있게
 const DECOS = ['bubbles', 'jellyfish', 'coral_tree', 'coral_fan', 'kelp', 'shell', 'anchor', 'chest', 'rock', 'urchin'];
 
 export function nodePos(id) {
@@ -52,7 +53,7 @@ export class MapScene extends Phaser.Scene {
   create(data = {}) {
     enableGlow(this);
     const d = load();
-    this.cameras.main.setBounds(0, 0, W, TOTAL_H);
+    this.cameras.main.setBounds(0, 0, W, TOTAL_H + DOCK_PAD);
     // 배경 (아래가 월드 1)
     this.bgLayers = [];
     for (let w = 1; w <= WORLDS; w++) {
@@ -135,45 +136,40 @@ export class MapScene extends Phaser.Scene {
     this.coinText = this.add.text(coin.x + 50, 80, `${d.coins}`, TXT.mid).setOrigin(0, 0.5).setScrollFactor(0);
     const star = this.add.image(W / 2 + 110, 80, 'star_small_on').setScale(1.1).setScrollFactor(0);
     this.add.text(star.x + 46, 80, `${availableStars()}`, TXT.mid).setOrigin(0, 0.5).setScrollFactor(0);
-    // 바다 복원 버튼 (오른쪽 아래 고정). 별로 할 수 있는 과제가 있으면 빨간 알림 + 통통
-    const reef = iconButton(this, W - 120, H - 190, 'ico_reef', () => {
+    // ── 아래 고정 바: 미션 · 도감 · 업적 · 바다 복원 (받을 보상·할 일이 있으면 빨간 알림)
+    const dockBg = this.add.image(W / 2, H, 'hud_topbar').setOrigin(0.5, 0).setFlipY(true).setDisplaySize(W, 270).setScrollFactor(0).setDepth(29);
+    dockBg.setOrigin(0.5, 1);
+    const goReef = () => {
       this.cameras.main.fadeOut(220, 189, 235, 255);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Reef'));
-    }, { size: 160 }).setScrollFactor(0).setDepth(30);
-    this.add.text(W - 120, H - 85, t('restoreTitle'), { ...TXT.small, fontSize: '28px', strokeThickness: 7 }).setOrigin(0.5).setScrollFactor(0).setDepth(30);
-    const maxW = Math.min(10, Math.ceil(Math.min(d.unlocked, 100) / 10));
-    let canDo = false;
-    for (let w = 1; w <= maxW; w++) { const n = d.restore[w] || 0; if (n < RESTORE_TASKS && availableStars() >= taskCost(w, n)) canDo = true; }
-    // 일일 미션 버튼 (왼쪽 아래). 받을 보상이 있으면 숫자 알림
-    const mis = iconButton(this, 120, H - 190, 'ico_mission', () => missionPopup(this, () => this.refreshMissionBadge()), { size: 160 }).setScrollFactor(0).setDepth(30);
-    this.add.text(120, H - 85, t('missionBtn'), { ...TXT.small, fontSize: '28px', strokeThickness: 7 }).setOrigin(0.5).setScrollFactor(0).setDepth(30);
-    this.misBadge = this.add.circle(175, H - 245, 24, 0xFF3B4A).setStrokeStyle(5, 0xffffff).setScrollFactor(0).setDepth(31);
-    this.misBadgeTxt = this.add.text(175, H - 247, '', { ...TXT.small, fontSize: '28px', strokeThickness: 0 }).setOrigin(0.5).setScrollFactor(0).setDepth(32);
-    this.misBtn = mis;
-    this.refreshMissionBadge();
-    // 도감 · 업적 (미션 위에 차례로)
-    this.sideBadges = [];
-    const side = (y, icon, label, open, countFn) => {
-      const btn = iconButton(this, 120, y, icon, () => open(this, () => this.refreshSideBadges()), { size: 140 }).setScrollFactor(0).setDepth(30);
-      this.add.text(120, y + 90, label, { ...TXT.small, fontSize: '26px', strokeThickness: 7 }).setOrigin(0.5).setScrollFactor(0).setDepth(30);
-      const dot = this.add.circle(170, y - 50, 22, 0xFF3B4A).setStrokeStyle(5, 0xffffff).setScrollFactor(0).setDepth(31);
-      const txt = this.add.text(170, y - 52, '', { ...TXT.small, fontSize: '26px', strokeThickness: 0 }).setOrigin(0.5).setScrollFactor(0).setDepth(32);
-      this.sideBadges.push({ dot, txt, countFn });
     };
-    side(H - 400, 'ico_book', t('dexBtn'), dexPopup, dexClaimable);
-    side(H - 600, 'ico_trophy', t('achBtn'), achPopup, achClaimable);
-    this.refreshSideBadges();
+    const reefCount = () => {
+      const maxW = Math.min(10, Math.ceil(Math.min(d.unlocked, 100) / 10));
+      for (let w = 1; w <= maxW; w++) { const n = d.restore[w] || 0; if (n < RESTORE_TASKS && availableStars() >= taskCost(w, n)) return 1; }
+      return 0;
+    };
+    const items = [
+      ['ico_mission', t('missionBtn'), () => missionPopup(this, () => this.refreshDock()), claimableCount],
+      ['ico_book', t('dexBtn'), () => dexPopup(this, () => this.refreshDock()), dexClaimable],
+      ['ico_trophy', t('achBtn'), () => achPopup(this, () => this.refreshDock()), achClaimable],
+      ['ico_reef', t('restoreTitle'), goReef, reefCount],
+    ];
+    this.dock = items.map(([icon, label, open, countFn], i) => {
+      const x = W * (0.125 + i * 0.25), y = H - 150;
+      const btn = iconButton(this, x, y, icon, open, { size: 132 }).setScrollFactor(0).setDepth(30);
+      this.add.text(x, H - 58, label, { ...TXT.small, fontSize: '26px', strokeThickness: 7 }).setOrigin(0.5).setScrollFactor(0).setDepth(30);
+      const dot = this.add.circle(x + 52, y - 52, 22, 0xFF3B4A).setStrokeStyle(5, 0xffffff).setScrollFactor(0).setDepth(31);
+      const txt = this.add.text(dot.x, dot.y - 2, '', { ...TXT.small, fontSize: '26px', strokeThickness: 0 }).setOrigin(0.5).setScrollFactor(0).setDepth(32);
+      this.tweens.add({ targets: [dot, txt], scale: 1.18, yoyo: true, repeat: -1, duration: 420, ease: 'Sine.InOut' });
+      return { btn, dot, txt, countFn, bang: icon === 'ico_reef' };
+    });
+    this.refreshDock();
     // 오늘 첫 방문이면 출석 보상 (새 월드로 이동하는 연출이 끝난 뒤)
     if (dailyState().canClaim) this.time.delayedCall(data.arrive ? 3600 : 650, () => dailyPopup(this));
-    if (canDo) {
-      const dot = this.add.circle(W - 65, H - 245, 24, 0xFF3B4A).setStrokeStyle(5, 0xffffff).setScrollFactor(0).setDepth(31);
-      this.add.text(dot.x, dot.y - 2, '!', { ...TXT.small, fontSize: '32px', strokeThickness: 0 }).setOrigin(0.5).setScrollFactor(0).setDepth(32);
-      this.tweens.add({ targets: reef, y: reef.y - 16, yoyo: true, repeat: -1, duration: 450, ease: 'Sine.InOut' });
-    }
 
     // 스크롤
     const focus = nodePos(Math.min(d.unlocked, LEVELS.length));
-    const clampY = y => Phaser.Math.Clamp(y - H * 0.6, 0, TOTAL_H - H);
+    const clampY = y => Phaser.Math.Clamp(y - H * 0.6, 0, TOTAL_H + DOCK_PAD - H);
     this.cameras.main.scrollY = clampY(focus.y);
     if (data.arrive) {
       // 월드 클리어 직후: 지난 월드 보스 노드에서 새 월드 첫 노드까지 카메라가 헤엄쳐 올라감
@@ -187,10 +183,10 @@ export class MapScene extends Phaser.Scene {
       if (!p.isDown) return;
       const dy = p.y - this.lastY; this.lastY = p.y;
       this.dragDist += Math.abs(dy);
-      this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY - dy, 0, TOTAL_H - H);
+      this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY - dy, 0, TOTAL_H + DOCK_PAD - H);
       this.vel = -dy;
     });
-    this.input.on('wheel', (p, o, dx, dy) => { this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + dy, 0, TOTAL_H - H); });
+    this.input.on('wheel', (p, o, dx, dy) => { this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + dy, 0, TOTAL_H + DOCK_PAD - H); });
 
     audio.music('bgm_map', this);
     this.cameras.main.fadeIn(250, 189, 235, 255);
@@ -225,22 +221,18 @@ export class MapScene extends Phaser.Scene {
     return g;
   }
 
-  refreshSideBadges() {
-    for (const b of this.sideBadges || []) { const n = b.countFn(); b.dot.setVisible(n > 0); b.txt.setVisible(n > 0).setText(`${n}`); }
-  }
-
-  refreshMissionBadge() {
-    const n = claimableCount();
-    this.misBadge.setVisible(n > 0); this.misBadgeTxt.setVisible(n > 0).setText(`${n}`);
-    if (n > 0 && !this.misBounce) this.misBounce = this.tweens.add({ targets: this.misBtn, y: this.misBtn.y - 16, yoyo: true, repeat: -1, duration: 450, ease: 'Sine.InOut' });
-    if (!n && this.misBounce) { this.misBounce.stop(); this.misBounce = null; this.misBtn.y = H - 190; }
+  refreshDock() {
+    for (const b of this.dock || []) {
+      const n = b.countFn();
+      b.dot.setVisible(n > 0); b.txt.setVisible(n > 0).setText(b.bang ? '!' : `${n}`);
+    }
   }
 
   update() {
     const cam = this.cameras.main;
     for (const g of this.bgLayers || []) g.setVisible(g.y0 < cam.scrollY + H && g.y0 + WORLD_H > cam.scrollY);
     if (!this.input.activePointer.isDown && Math.abs(this.vel) > 0.5) {
-      this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + this.vel, 0, TOTAL_H - H);
+      this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + this.vel, 0, TOTAL_H + DOCK_PAD - H);
       this.vel *= 0.92;
     }
   }
