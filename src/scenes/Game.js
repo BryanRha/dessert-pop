@@ -667,27 +667,59 @@ export class GameScene extends Phaser.Scene {
   }
 
   // 폭탄 연출: 부풀며 하얗게 번쩍 → 터지는 범위가 빛남 → 불꽃 + 충격파 + 파편
+  // 폭탄 연출 (물속 폭발): 물방울을 빨아들이며 부풂 → 빛줄기·이중 충격파 → 물보라·거품 고리, 터지는 칸마다 둥근 빛
   async boom(f, at, hits, rad) {
+    const sp = this.speed;
+    const R = (rad + 0.5) * CELL;                  // 폭발 반경 (3×3 → 1.5칸, 5×5 → 2.5칸)
     const h = hits.find(x => x.at[0] === f.at[0] && x.at[1] === f.at[1] && x.pid);
     const s = h && this.sprites.get(h.pid);
-    if (s) {
-      // 블록 스프라이트는 컨테이너라 틴트 대신 흰 빛을 겹쳐서 번쩍이게 한다
-      const glow = this.add.image(at.x, at.y, 'ptc_glow').setScale(0.4).setAlpha(0);
-      this.fxLayer.add(glow);
-      this.tweens.add({ targets: glow, alpha: 1, scale: 1.1, duration: 110 / this.speed, onComplete: () => this.tweens.add({ targets: glow, alpha: 0, duration: 200, onComplete: () => glow.destroy() }) });
-      await tweenP(this, { targets: s, scale: s.scale * 1.45, duration: 110 / this.speed, ease: 'Quad.Out' });
+    // ① 빨아들임: 주변 물방울이 폭탄으로 모여들고, 폭탄이 하얗게 부풂
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2, d = R * 1.1;
+      const b = this.add.image(at.x + Math.cos(a) * d, at.y + Math.sin(a) * d, 'ptc_bubble').setScale(0.3).setAlpha(0.9);
+      this.fxLayer.add(b);
+      this.tweens.add({ targets: b, x: at.x, y: at.y, scale: 0.08, duration: 130 / sp, ease: 'Quad.In', onComplete: () => b.destroy() });
     }
+    const glow = this.add.image(at.x, at.y, 'ptc_glow').setScale(0.4).setAlpha(0).setTint(0xFFF1C8);
+    this.fxLayer.add(glow);
+    this.tweens.add({ targets: glow, alpha: 1, scale: 1.2, duration: 130 / sp, onComplete: () => this.tweens.add({ targets: glow, alpha: 0, scale: 2.2, duration: 260, onComplete: () => glow.destroy() }) });
+    if (s) await tweenP(this, { targets: s, scale: s.scale * 1.45, duration: 130 / sp, ease: 'Quad.In' });
+    else await wait(this, 130 / sp);
+
     audio.play('sfx_bomb', { pan: this.panOf(f.at[1]) });
     audio.buzz(rad === 1 ? 45 : 80);
-    const size = (rad * 2 + 1) * CELL;
-    const area = this.add.rectangle(at.x, at.y, size, size, 0xFFF1A8, 0.75).setStrokeStyle(10, 0xFF7A1A, 1);
-    this.fxLayer.add(area);
-    this.tweens.add({ targets: area, alpha: 0, scale: 1.08, duration: 380, onComplete: () => area.destroy() });
-    this.fx('fx_bomb', at.x, at.y, { scale: rad === 1 ? 2.6 : 4.2 });
-    const ringFx = this.add.circle(at.x, at.y, 30, 0xffffff, 0).setStrokeStyle(16, 0xFF7A1A, 1);
-    this.fxLayer.add(ringFx);
-    this.tweens.add({ targets: ringFx, radius: size * 0.85, alpha: 0, duration: 420, ease: 'Cubic.Out', onComplete: () => ringFx.destroy() });
-    this.sparkles(at.x, at.y, 0xFF7A1A, 10);
+    // ② 카메라 펀치 (아주 짧게 확대됐다 돌아옴)
+    const cam = this.cameras.main;
+    this.tweens.add({ targets: cam, zoom: rad === 1 ? 1.025 : 1.045, yoyo: true, duration: 90, ease: 'Quad.Out', onComplete: () => cam.setZoom(1) });
+    // ③ 따뜻한 방사형 빛줄기 + 불꽃
+    const rays = this.add.image(at.x, at.y, 'ptc_rays').setScale(0.2).setTint(0xFFC46A).setAlpha(0.95);
+    this.fxLayer.add(rays);
+    this.tweens.add({ targets: rays, scale: R / 170, angle: 40, alpha: 0, duration: 480, ease: 'Cubic.Out', onComplete: () => rays.destroy() });
+    this.fx('fx_bomb', at.x, at.y, { scale: rad === 1 ? 2.4 : 4.0 });
+    // ④ 이중 충격파: 주황 고리 → 조금 늦게 하얀 고리
+    [[0xFF8A3D, 0, 1.0], [0xFFFFFF, 70, 0.8]].forEach(([tint, delay, a]) => {
+      const ring = this.add.image(at.x, at.y, 'ptc_ring').setScale(0.15).setTint(tint).setAlpha(a);
+      this.fxLayer.add(ring);
+      this.tweens.add({ targets: ring, scale: (R * 2.3) / 256, alpha: 0, delay, duration: 420, ease: 'Cubic.Out', onComplete: () => ring.destroy() });
+    });
+    // ⑤ 터지는 칸마다 둥근 빛 (가운데부터 바깥으로)
+    for (let dr = -rad; dr <= rad; dr++) for (let dc = -rad; dc <= rad; dc++) {
+      const r = f.at[0] + dr, c = f.at[1] + dc;
+      if (!this.engine.cell(r, c)) continue;
+      const p = this.xy(r, c);
+      const g = this.add.image(p.x, p.y, 'ptc_glow').setScale(0.2).setAlpha(0).setTint(0xFFE2A0);
+      this.fxLayer.add(g);
+      this.tweens.add({ targets: g, alpha: 0.85, scale: 0.55, delay: Math.max(Math.abs(dr), Math.abs(dc)) * 45, duration: 110, yoyo: true, onComplete: () => g.destroy() });
+    }
+    // ⑥ 물보라: 물방울이 사방으로 튀었다가 떨어짐 + 거품 고리
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + Math.random() * 0.3, d = R * (0.9 + Math.random() * 0.6);
+      const dp = this.add.image(at.x, at.y, i % 3 ? 'ptc_drop' : 'ptc_bubble').setScale(0.3 + Math.random() * 0.3).setRotation(a + Math.PI / 2);
+      this.fxLayer.add(dp);
+      const tx = at.x + Math.cos(a) * d, ty = at.y + Math.sin(a) * d;
+      this.tweens.add({ targets: dp, x: tx, y: ty, duration: 260, ease: 'Quad.Out',
+        onComplete: () => this.tweens.add({ targets: dp, y: ty + 70, alpha: 0, scale: dp.scale * 0.6, duration: 320, ease: 'Quad.In', onComplete: () => dp.destroy() }) });
+    }
     this.sparkles(at.x, at.y, 0xFFD23F, 8);
   }
 
