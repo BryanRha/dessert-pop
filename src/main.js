@@ -24,6 +24,18 @@ async function start() {
   audio.attach(game);
   setH(game.scale.height);
   game.scale.on('resize', gs => setH(gs.height));
+  // 화면 회전: 브라우저가 회전 직후 예전 크기를 알려 주는 경우가 있어서, 잠시 뒤 몇 번 더 크기를 다시 잰다
+  // (안 그러면 가로→세로로 돌아와도 가로 크기에 머무름)
+  const refresh = () => [60, 250, 600, 1200].forEach(ms => setTimeout(() => game.scale.refresh(), ms));
+  addEventListener('resize', refresh);
+  addEventListener('orientationchange', refresh);
+  screen.orientation?.addEventListener?.('change', refresh);
   window.__game = game; // 디버그용
 }
+
+// 홈 화면 추가(앱 설치): 크롬·삼성 인터넷은 설치 창을 띄울 수 있게 이벤트를 보관해 둔다
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); window.__installPrompt = e; });
+window.addEventListener('appinstalled', () => { window.__installPrompt = null; window.__installed = true; });
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
 start();

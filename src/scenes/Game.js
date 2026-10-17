@@ -581,7 +581,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   async animBlast(st) {
-    let big = false, ripple = null;
+    let big = false, ripple = null; const centers = [];
     for (const f of st.fx) {
       const at = f.at ? this.xy(...f.at) : { x: W / 2, y: H / 2 };
       const bw = this.engine.s.w * CELL, bh = this.engine.s.h * CELL;
@@ -590,10 +590,10 @@ export class GameScene extends Phaser.Scene {
       switch (f.fx) {
         case 'lineH': audio.play('sfx_line'); lineH(f.at[0]); break;
         case 'lineV': audio.play('sfx_line'); lineV(f.at[1]); break;
-        case 'bomb': audio.play('sfx_bomb'); this.fx('fx_bomb', at.x, at.y, { scale: 1.9 }); big = true; break;
+        case 'bomb': await this.boom(f, at, st.hits, 1); centers.push(f.at); big = true; break;
         case 'cross': audio.play('sfx_combo_special'); lineH(f.at[0]); lineV(f.at[1]); big = true; break;
         case 'bigCross': audio.play('sfx_combo_special'); for (let d = -1; d <= 1; d++) { lineH(f.at[0] + d); lineV(f.at[1] + d); } big = true; break;
-        case 'bigBomb': audio.play('sfx_combo_special'); this.fx('fx_bomb', at.x, at.y, { scale: 3.2 }); big = true; break;
+        case 'bigBomb': audio.play('sfx_combo_special'); await this.boom(f, at, st.hits, 2); centers.push(f.at); big = true; break;
         case 'rainbowAll': {
           // 진주 + 진주: 큰 진주 폭발 → 빛줄기가 모든 칸으로 → 중심에서 물결처럼 차례로 터짐 (아래 handleHits)
           audio.play('sfx_rainbow'); audio.play('sfx_combo_special');
@@ -611,8 +611,8 @@ export class GameScene extends Phaser.Scene {
             this.fxLayer.add(beam);
             this.tweens.add({ targets: beam, alpha: 0, duration: 480, delay: 160, onComplete: () => beam.destroy() });
           });
-          this.bannerText(t('pearlStorm'));
-          ripple = f.at;
+          this.pearlStorm();
+          ripple = true; centers.push(f.at);
           big = true;
           await wait(this, 380 / this.speed);
           break;
@@ -636,30 +636,56 @@ export class GameScene extends Phaser.Scene {
         default: break;
       }
     }
-    if (big) this.cameras.main.shake(ripple ? 520 : 180, ripple ? 0.014 : 0.006);
+    if (big) this.cameras.main.shake(ripple ? 520 : 260, ripple ? 0.014 : 0.011);
     await wait(this, 90 / this.speed);
-    if (ripple) {
-      // 중심에서 가까운 칸부터 한 고리씩 터뜨린다
-      const ring = h => Math.max(Math.abs(h.at[0] - ripple[0]), Math.abs(h.at[1] - ripple[1]));
+    if (centers.length) {
+      // 폭발 중심에서 가까운 칸부터 한 고리씩 터뜨린다 (폭탄·진주 대폭발)
+      const ring = h => Math.min(...centers.map(c => Math.max(Math.abs(h.at[0] - c[0]), Math.abs(h.at[1] - c[1]))));
       const maxR = Math.max(0, ...st.hits.map(ring));
       for (let d = 0; d <= maxR; d++) {
         const group = st.hits.filter(h => ring(h) === d);
         if (!group.length) continue;
         this.handleHits(group);
-        if (d % 2 === 0) audio.play(`sfx_match_${Math.min(5, 1 + d / 2)}`, { volume: 0.5 });
-        await wait(this, 70 / this.speed);
+        if (ripple && d % 2 === 0) audio.play(`sfx_match_${Math.min(5, 1 + d / 2)}`, { volume: 0.5 });
+        await wait(this, (ripple ? 70 : 55) / this.speed);
       }
     } else this.handleHits(st.hits);
     await wait(this, 200 / this.speed);
   }
 
-  // 화면 가운데 큰 글자 (진주 대폭발 등 특별한 순간)
-  bannerText(msg) {
-    const txt = this.add.text(W / 2, (BOARD_TOP + (this.boardBottom || H * 0.7)) / 2, msg, { ...TXT.title, fontSize: '96px', color: '#FFF6B0', stroke: '#6A2CB8', strokeThickness: 18 })
-      .setOrigin(0.5).setDepth(80).setScale(0.2).setAngle(-6);
-    this.tweens.add({ targets: txt, scale: 1, angle: 0, duration: 380, ease: 'Back.Out' });
-    this.tweens.add({ targets: txt, alpha: 0, y: txt.y - 80, delay: 1000, duration: 400, onComplete: () => txt.destroy() });
+  // 폭탄 연출: 부풀며 하얗게 번쩍 → 터지는 범위가 빛남 → 불꽃 + 충격파 + 파편
+  async boom(f, at, hits, rad) {
+    const h = hits.find(x => x.at[0] === f.at[0] && x.at[1] === f.at[1] && x.pid);
+    const s = h && this.sprites.get(h.pid);
+    if (s) {
+      // 블록 스프라이트는 컨테이너라 틴트 대신 흰 빛을 겹쳐서 번쩍이게 한다
+      const glow = this.add.image(at.x, at.y, 'ptc_glow').setScale(0.4).setAlpha(0);
+      this.fxLayer.add(glow);
+      this.tweens.add({ targets: glow, alpha: 1, scale: 1.1, duration: 110 / this.speed, onComplete: () => this.tweens.add({ targets: glow, alpha: 0, duration: 200, onComplete: () => glow.destroy() }) });
+      await tweenP(this, { targets: s, scale: s.scale * 1.45, duration: 110 / this.speed, ease: 'Quad.Out' });
+    }
+    audio.play('sfx_bomb');
+    const size = (rad * 2 + 1) * CELL;
+    const area = this.add.rectangle(at.x, at.y, size, size, 0xFFF1A8, 0.75).setStrokeStyle(10, 0xFF7A1A, 1);
+    this.fxLayer.add(area);
+    this.tweens.add({ targets: area, alpha: 0, scale: 1.08, duration: 380, onComplete: () => area.destroy() });
+    this.fx('fx_bomb', at.x, at.y, { scale: rad === 1 ? 2.6 : 4.2 });
+    const ringFx = this.add.circle(at.x, at.y, 30, 0xffffff, 0).setStrokeStyle(16, 0xFF7A1A, 1);
+    this.fxLayer.add(ringFx);
+    this.tweens.add({ targets: ringFx, radius: size * 0.85, alpha: 0, duration: 420, ease: 'Cubic.Out', onComplete: () => ringFx.destroy() });
+    this.sparkles(at.x, at.y, 0xFF7A1A, 10);
+    this.sparkles(at.x, at.y, 0xFFD23F, 8);
   }
+
+  // 진주 대폭발 문구 (다른 콤보 문구와 같은 영문 이미지)
+  pearlStorm() {
+    if (this.comboImg) this.comboImg.destroy();
+    const img = this.add.image(W / 2, (BOARD_TOP + this.boardBottom) / 2 - 120, 'txt_pearl_storm').setDepth(60).setScale(0).setAngle(-6);
+    this.comboImg = img;
+    this.tweens.add({ targets: img, scale: 0.75, angle: 0, duration: 380, ease: 'Back.Out' });
+    this.tweens.add({ targets: img, alpha: 0, y: img.y - 70, delay: 1100, duration: 350, onComplete: () => img.destroy() });
+  }
+
 
   handleHits(hits) {
     let jelly = false, ice = false, stone = false, chain = false;

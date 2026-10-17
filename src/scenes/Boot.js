@@ -28,6 +28,7 @@ export class BootScene extends Phaser.Scene {
     const m = this.cache.json.get('manifest');
     // 월드 배경(큰 이미지)은 레벨에 들어갈 때 그 월드 것만 불러온다 (Game.preload)
     for (const k of m.images) if (!k.startsWith('bg_game_')) this.load.image(k, asset(`assets/img/${k}.png`));
+    this.load.image('app_icon_small', asset('icons/icon_192.png'));   // 홈 화면 추가 안내용
     for (const [k, s] of Object.entries(m.sheets)) this.load.spritesheet(k, asset(`assets/fx/${k}.png`), { frameWidth: s.frameWidth, frameHeight: s.frameHeight, endFrame: s.frames - 1 });
     for (const k of m.fonts) this.load.bitmapFont(k, asset(`assets/fonts/${k}.png`), asset(`assets/fonts/${k}.xml`));
     // AAC 오디오. 호스팅에 따라 .m4a 대신 .mp4 확장자로 올릴 수 있어 manifest.audioExt 로 지정

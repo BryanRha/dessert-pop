@@ -2,7 +2,7 @@ import { W, H, TXT, VERSION } from '../config.js';
 import { t } from '../i18n.js';
 import { audio } from '../audio.js';
 import { load } from '../save.js';
-import { button, iconButton } from '../ui/widgets.js';
+import { button, iconButton, popup, toast } from '../ui/widgets.js';
 import { settingsPopup } from './Map.js';
 
 export class TitleScene extends Phaser.Scene {
@@ -27,6 +27,12 @@ export class TitleScene extends Phaser.Scene {
     const play = button(this, W / 2, H * 0.5, t('play'), () => this.go(), { width: 600, height: 180, size: 72 });
     this.tweens.add({ targets: play, scale: 1.05, yoyo: true, repeat: -1, duration: 650, ease: 'Sine.InOut' });
     iconButton(this, W - 100, 110, 'ico_settings', () => settingsPopup(this), { size: 130 });
+    // 홈 화면에 추가 (이미 앱으로 실행 중이면 숨김)
+    const standalone = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone;
+    if (!standalone && !window.__installed) {
+      iconButton(this, 100, 110, 'ico_install', () => this.install(), { size: 130 });
+      this.add.text(100, 205, t('install'), { ...TXT.small, fontSize: '28px', strokeThickness: 7 }).setOrigin(0.5);
+    }
     this.add.text(W / 2, H - 50, `v${VERSION}`, { ...TXT.small, fontSize: '28px', strokeThickness: 6 }).setOrigin(0.5).setAlpha(0.7);
 
     // 브라우저 자동재생 정책: 첫 터치 이후에 음악 시작
@@ -34,6 +40,23 @@ export class TitleScene extends Phaser.Scene {
     else audio.music('bgm_title');
     this.cameras.main.fadeIn(300, 189, 235, 255);
     load();
+  }
+
+  async install() {
+    const ua = navigator.userAgent;
+    if (window.__installPrompt) {   // 안드로이드 크롬·삼성 인터넷: 바로 설치 창
+      const ev = window.__installPrompt; window.__installPrompt = null;
+      ev.prompt();
+      try { const r = await ev.userChoice; if (r.outcome === 'accepted') toast(this, t('installDone')); } catch { /* */ }
+      return;
+    }
+    const inApp = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp/i.test(ua);
+    const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const msg = inApp ? t('installInApp') : ios ? t('installIos') : t('installMenu');
+    const p = popup(this, { title: t('install'), width: 860, height: 640 });
+    p.box.add(this.add.image(0, -150, 'app_icon_small').setDisplaySize(150, 150));
+    p.box.add(this.add.text(0, 40, msg, { ...TXT.body, fontSize: '38px', lineSpacing: 12 }).setOrigin(0.5));
+    p.box.add(button(this, 0, 220, t('ok'), () => p.close(), { width: 360, height: 130, size: 46 }));
   }
 
   go() {
