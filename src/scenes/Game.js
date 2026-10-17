@@ -5,6 +5,7 @@ import { LEVELS } from '../core/levels.js';
 import { t } from '../i18n.js';
 import { audio, WORLD_BGM } from '../audio.js';
 import { pickTip } from '../tips.js';
+import { track, flush, onMissionDone } from '../missions.js';
 import { load, save, addStreak, breakStreak, recordWin, addCoins, addBooster, spendCoins, useBooster } from '../save.js';
 import { button, iconButton, popup, toast, starsRow, enableGlow } from '../ui/widgets.js';
 
@@ -52,6 +53,8 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     enableGlow(this);
+    const offMission = onMissionDone(def => this.missionToast(def));
+    this.events.once('shutdown', offMission);
     const s = this.engine.s;
     this.boardBottom = H - 270;
     const bg = this.add.image(W / 2, H / 2, `bg_game_${this.level.world}`);
@@ -573,7 +576,9 @@ export class GameScene extends Phaser.Scene {
     // 연쇄가 이어질수록 화면 흔들림·번쩍임·진동이 커짐
     if (st.level >= 3) { this.cameras.main.shake(140 + st.level * 30, 0.002 * Math.min(st.level, 6)); audio.buzz(12 + st.level * 4); }
     if (st.level >= 5) this.cameras.main.flash(120, 255, 255, 255, false);
+    if (st.level >= 4) track('combo');
     for (const c of st.created) {
+      track('make');
       this.setPieceTexture(c.id, { sp: c.sp });
       const s = this.sprites.get(c.id);
       if (s) { s.setScale(0.4); this.tweens.add({ targets: s, scale: 1, duration: 260, ease: 'Back.Out' }); this.fx('fx_special_create', s.x, s.y); }
@@ -602,9 +607,9 @@ export class GameScene extends Phaser.Scene {
       const lineV = (c) => { const x = this.xy(0, c).x; const s = this.add.sprite(x, bh / 2, 'fx_line_v').setDisplaySize(130, bh + 120); this.fxLayer.add(s); s.play('fx_line_v'); s.once('animationcomplete', () => s.destroy()); this.torpedo(x, at.y, false, bh); };
       const pan = f.at ? this.panOf(f.at[1]) : 0;
       switch (f.fx) {
-        case 'lineH': audio.play('sfx_line', { pan }); audio.buzz(25); lineH(f.at[0]); break;
-        case 'lineV': audio.play('sfx_line', { pan }); audio.buzz(25); lineV(f.at[1]); break;
-        case 'bomb': await this.boom(f, at, st.hits, 1); centers.push(f.at); big = true; break;
+        case 'lineH': track('line'); audio.play('sfx_line', { pan }); audio.buzz(25); lineH(f.at[0]); break;
+        case 'lineV': track('line'); audio.play('sfx_line', { pan }); audio.buzz(25); lineV(f.at[1]); break;
+        case 'bomb': track('bomb'); await this.boom(f, at, st.hits, 1); centers.push(f.at); big = true; break;
         case 'cross': audio.play('sfx_combo_special', { pan }); audio.buzz(50); lineH(f.at[0]); lineV(f.at[1]); big = true; break;
         case 'bigCross': audio.play('sfx_combo_special', { pan }); audio.buzz(70); for (let d = -1; d <= 1; d++) { lineH(f.at[0] + d); lineV(f.at[1] + d); } big = true; break;
         case 'bigBomb': audio.play('sfx_combo_special'); await this.boom(f, at, st.hits, 2); centers.push(f.at); big = true; break;
@@ -724,6 +729,18 @@ export class GameScene extends Phaser.Scene {
     this.sparkles(at.x, at.y, 0xFFD23F, 8);
   }
 
+  // 미션 완료 알림 (화면 위쪽에서 내려왔다 올라감)
+  missionToast(def) {
+    audio.play('sfx_star_2');
+    const c = this.add.container(W / 2, -80).setDepth(950);
+    c.add(this.add.nineslice(0, 0, 'hud_goal_box', null, 700, 120, 40, 40, 40, 40));
+    c.add(this.add.image(-290, 0, 'ico_mission').setScale(0.4));
+    c.add(this.add.text(-230, -22, t('missionDone'), { ...TXT.small, fontSize: '30px', color: '#FF6A1F', stroke: '#FFFFFF', strokeThickness: 6 }).setOrigin(0, 0.5));
+    c.add(this.add.text(-230, 22, t(`missionText.${def.id}`), { ...TXT.dark, fontSize: '30px' }).setOrigin(0, 0.5));
+    this.tweens.add({ targets: c, y: 330, duration: 380, ease: 'Back.Out',
+      onComplete: () => this.tweens.add({ targets: c, y: -100, delay: 1800, duration: 300, ease: 'Back.In', onComplete: () => c.destroy() }) });
+  }
+
   // 진주 대폭발 문구 (다른 콤보 문구와 같은 영문 이미지)
   pearlStorm() {
     if (this.comboImg) this.comboImg.destroy();
@@ -742,6 +759,7 @@ export class GameScene extends Phaser.Scene {
         jelly = true;
         const key = `${h.at[0]},${h.at[1]}`; const js = this.jellySprites.get(key);
         if (js) {
+          track('jelly');
           if (h.jelly <= 0) { this.jellySprites.delete(key); this.tweens.add({ targets: js, alpha: 0, scale: js.scale * 1.2, duration: 220, onComplete: () => js.destroy() }); }
           else js.setTexture(`obs_jelly_${h.jelly}`);
         }
@@ -751,6 +769,7 @@ export class GameScene extends Phaser.Scene {
         const s = this.sprites.get(h.pid);
         if (h.cover.t === 'chain') chain = true; else ice = true;
         if (s && s.cover) {
+          if (h.cover.hp <= 0) track('cover');
           if (h.cover.hp <= 0) { const cv = s.cover; s.cover = null; this.tweens.add({ targets: cv, alpha: 0, scale: 1.3, duration: 200, onComplete: () => cv.destroy() }); }
           else s.cover.setTexture(this.coverTexture(h.cover));
         }
@@ -765,7 +784,7 @@ export class GameScene extends Phaser.Scene {
       if (h.removed) {
         const s = this.sprites.get(h.removed);
         this.sprites.delete(h.removed);
-        if (h.kind === 'tile') this.popTile(x, y, h.color);
+        if (h.kind === 'tile') { this.popTile(x, y, h.color); track('collect', 1, h.color); }
         else if (h.kind === 'stone' || h.kind === 'crate') { stone = true; this.fx('fx_stone_crack', x, y, { scale: 1.2 }); }
         else if (h.kind === 'slime') { this.fx('fx_jelly_break', x, y, { tint: 0x4E5E1E }); jelly = true; }
         else if (h.kind === 'timer') { this.fx('fx_bomb', x, y, { scale: 0.9 }); }
@@ -918,6 +937,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   afterTurn() {
+    flush();
     if (window.__debug) this.verifySprites();
     this.syncAll();
     const s = this.engine.s;
@@ -972,6 +992,7 @@ export class GameScene extends Phaser.Scene {
     const coins = 20 + stars * 10 + (this.level.boss ? 30 : 0) + (first3 ? 30 : 0);
     recordWin(this.levelId, stars, score, LEVELS.length + 1);
     const streakNow = addStreak();
+    track('win'); track('stars', stars); flush();
     addCoins(coins);
     // 진행 보상: 5레벨마다 처음 클리어하면 부스터 선물 (막혔을 때의 구제책이 아니라 진행에 대한 보상)
     const GIFTS = ['hammer', 'shuffle', 'swap', 'moves'];

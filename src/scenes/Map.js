@@ -4,6 +4,8 @@ import { t } from '../i18n.js';
 import { audio } from '../audio.js';
 import { load, save, availableStars } from '../save.js';
 import { RESTORE_TASKS, taskCost } from '../restore.js';
+import { dailyPopup, missionPopup } from '../ui/meta.js';
+import { dailyState, claimableCount } from '../missions.js';
 import { LEVELS } from '../core/levels.js';
 import { popup, button, iconButton, toast, enableGlow } from '../ui/widgets.js';
 
@@ -140,6 +142,15 @@ export class MapScene extends Phaser.Scene {
     const maxW = Math.min(10, Math.ceil(Math.min(d.unlocked, 100) / 10));
     let canDo = false;
     for (let w = 1; w <= maxW; w++) { const n = d.restore[w] || 0; if (n < RESTORE_TASKS && availableStars() >= taskCost(w, n)) canDo = true; }
+    // 일일 미션 버튼 (왼쪽 아래). 받을 보상이 있으면 숫자 알림
+    const mis = iconButton(this, 120, H - 190, 'ico_mission', () => missionPopup(this, () => this.refreshMissionBadge()), { size: 160 }).setScrollFactor(0).setDepth(30);
+    this.add.text(120, H - 85, t('missionBtn'), { ...TXT.small, fontSize: '28px', strokeThickness: 7 }).setOrigin(0.5).setScrollFactor(0).setDepth(30);
+    this.misBadge = this.add.circle(175, H - 245, 24, 0xFF3B4A).setStrokeStyle(5, 0xffffff).setScrollFactor(0).setDepth(31);
+    this.misBadgeTxt = this.add.text(175, H - 247, '', { ...TXT.small, fontSize: '28px', strokeThickness: 0 }).setOrigin(0.5).setScrollFactor(0).setDepth(32);
+    this.misBtn = mis;
+    this.refreshMissionBadge();
+    // 오늘 첫 방문이면 출석 보상 (새 월드로 이동하는 연출이 끝난 뒤)
+    if (dailyState().canClaim) this.time.delayedCall(data.arrive ? 3600 : 650, () => dailyPopup(this));
     if (canDo) {
       const dot = this.add.circle(W - 65, H - 245, 24, 0xFF3B4A).setStrokeStyle(5, 0xffffff).setScrollFactor(0).setDepth(31);
       this.add.text(dot.x, dot.y - 2, '!', { ...TXT.small, fontSize: '32px', strokeThickness: 0 }).setOrigin(0.5).setScrollFactor(0).setDepth(32);
@@ -198,6 +209,13 @@ export class MapScene extends Phaser.Scene {
     }
     g.y0 = y0;
     return g;
+  }
+
+  refreshMissionBadge() {
+    const n = claimableCount();
+    this.misBadge.setVisible(n > 0); this.misBadgeTxt.setVisible(n > 0).setText(`${n}`);
+    if (n > 0 && !this.misBounce) this.misBounce = this.tweens.add({ targets: this.misBtn, y: this.misBtn.y - 16, yoyo: true, repeat: -1, duration: 450, ease: 'Sine.InOut' });
+    if (!n && this.misBounce) { this.misBounce.stop(); this.misBounce = null; this.misBtn.y = H - 190; }
   }
 
   update() {

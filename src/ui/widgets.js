@@ -75,11 +75,20 @@ export function popup(scene, { title, width = 900, height = 1100, onClose, close
   scene.tweens.add({ targets: box, scale: 1, alpha: 1, y: H / 2, duration: 320, ease: 'Back.Out' });
   audio.play('sfx_popup_open');
   layer.box = box; layer.close = close; layer.panelH = height; layer.panelW = width;
+  // 스크롤되는 화면(지도)에서도 팝업은 화면에 고정: 지금과 이 프레임에 추가될 내용까지 고정
+  pin(layer);
+  scene.events.once('postupdate', () => pin(layer));
+  layer.pin = () => pin(layer);
   return layer;
 }
 
+export function pin(o) {
+  if (o.setScrollFactor) o.setScrollFactor(0);
+  if (o.list) o.list.forEach(pin);
+}
+
 export function toast(scene, msg, y = H * 0.45) {
-  const t = scene.add.text(W / 2, y, msg, { ...TXT.mid, fontSize: '42px', align: 'center', wordWrap: { width: W - 120, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(2000);
+  const t = scene.add.text(W / 2, y, msg, { ...TXT.mid, fontSize: '42px', align: 'center', wordWrap: { width: W - 120, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(2000).setScrollFactor(0);
   t.setScale(0.6); t.alpha = 0;
   scene.tweens.add({ targets: t, scale: 1, alpha: 1, duration: 200, ease: 'Back.Out' });
   scene.tweens.add({ targets: t, alpha: 0, y: y - 80, delay: 1300, duration: 400, onComplete: () => t.destroy() });

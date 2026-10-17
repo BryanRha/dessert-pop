@@ -5,6 +5,7 @@ import { t } from '../i18n.js';
 import { audio } from '../audio.js';
 import { load, save, availableStars, spendStars, addCoins, addBooster } from '../save.js';
 import { RESTORE_TASKS, TASK_COINS, WORLD_COINS, restoreTheme, taskCost } from '../restore.js';
+import { track, flush } from '../missions.js';
 import { button, iconButton, toast, enableGlow } from '../ui/widgets.js';
 
 export class ReefScene extends Phaser.Scene {
@@ -164,6 +165,7 @@ export class ReefScene extends Phaser.Scene {
     if (!spendStars(cost)) return;
     this.busy = true;
     d.restore[w] = n + 1; save();
+    track('restore'); flush();
     addCoins(TASK_COINS);
     audio.play('sfx_booster');
     // 별이 위에서 날아가 장면에 내려앉음
