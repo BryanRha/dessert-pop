@@ -28,6 +28,8 @@ export class GameScene extends Phaser.Scene {
   init(data) {
     this.levelId = data.levelId || 1;
     this.level = LEVELS.find(l => l.id === this.levelId);
+    // scene.restart 는 같은 장면 객체를 다시 쓰므로, 판마다 바뀌는 표시는 여기서 초기화
+    this.worldCleared = null; this.comboImg = null; this.ptcLive = 0; this.pendingPause = false;
     this.engine = new Engine(this.level, (Date.now() % 1e9) | 0);
     this.sprites = new Map();
     this.jellySprites = new Map();
