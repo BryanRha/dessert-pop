@@ -170,7 +170,8 @@
   "txt_level_clear",
   "txt_out_of_moves",
   "txt_pearl_storm",
-  "txt_world_clear"
+  "txt_world_clear",
+  "ui_vignette"
  ],
  "sheets": {
   "fx_pop": {

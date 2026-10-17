@@ -2,13 +2,14 @@ import { W, H, TXT, VERSION } from '../config.js';
 import { t } from '../i18n.js';
 import { audio } from '../audio.js';
 import { load } from '../save.js';
-import { button, iconButton, popup, toast } from '../ui/widgets.js';
+import { button, iconButton, popup, toast, enableGlow } from '../ui/widgets.js';
 import { settingsPopup } from './Map.js';
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
 
   create() {
+    enableGlow(this);
     const bg = this.add.image(W / 2, H / 2, 'bg_title');
     bg.setScale(Math.max(W / bg.width, H / bg.height));
     const logo = this.add.image(W / 2, H * 0.2, 'logo_game').setScale(1.05);

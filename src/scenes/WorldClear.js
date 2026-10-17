@@ -4,6 +4,7 @@
 // 보스(10번째) 레벨을 처음 깼을 때 Game → WorldClear → Map(새 월드로 카메라 이동) 순서로 나온다.
 import { W, H, TXT, MAP_THEME, WORLD_COUNT } from '../config.js';
 import { t } from '../i18n.js';
+import { enableGlow } from '../ui/widgets.js';
 import { audio } from '../audio.js';
 import { addCoins } from '../save.js';
 import { asset } from '../config.js';
@@ -23,6 +24,7 @@ export class WorldClearScene extends Phaser.Scene {
   }
 
   create({ world = 1 } = {}) {
+    enableGlow(this);
     const last = world >= WORLD_COUNT;
     const next = Math.min(WORLD_COUNT, world + 1);
     const [top, bottom] = MAP_THEME[(next - 1) % MAP_THEME.length];

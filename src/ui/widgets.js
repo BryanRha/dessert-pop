@@ -7,6 +7,12 @@ export function button(scene, x, y, label, onClick, { kind = 'primary', width = 
   const key = `btn_${kind}`;
   const c = scene.add.container(x, y);
   const slice = kind === 'primary' ? 70 : 56;
+  // 주요 버튼 뒤에서 은은하게 숨 쉬는 빛 (가산 혼합)
+  if (kind === 'primary') {
+    const halo = scene.add.image(0, 6, 'ptc_glow').setDisplaySize(width * 1.35, height * 1.9).setTint(0xFFB070).setAlpha(0.35).setBlendMode(Phaser.BlendModes.ADD);
+    c.add(halo);
+    scene.tweens.add({ targets: halo, alpha: 0.12, yoyo: true, repeat: -1, duration: 1100, ease: 'Sine.InOut' });
+  }
   const bg = scene.add.nineslice(0, 0, key, null, width, height, slice, slice, 0, 0);
   const txt = scene.add.text(0, -8, label, { ...TXT.mid, fontSize: `${size}px`, stroke: kind === 'primary' ? '#8A2E08' : '#0B5E58' }).setOrigin(0.5);
   c.add([bg, txt]);
@@ -39,29 +45,34 @@ export function iconButton(scene, x, y, icon, onClick, { size = 120, bg = 'btn_i
 // 모달 팝업. 반환된 container 에 내용을 add 하고, close() 로 닫는다.
 export function popup(scene, { title, width = 900, height = 1100, onClose, closeButton = true } = {}) {
   const layer = scene.add.container(0, 0).setDepth(1000);
-  const dim = scene.add.rectangle(W / 2, H / 2, W * 2, H * 2, 0x06204A, 0.55).setInteractive();
+  // 배경: 옅은 남색 + 가장자리 비네트 (단색으로 덮지 않고 뒤 화면이 비쳐 보이게)
+  const dim = scene.add.rectangle(W / 2, H / 2, W * 2, H * 2, 0x06204A, 0.32).setInteractive();
+  const vig = scene.add.image(W / 2, H / 2, 'ui_vignette').setDisplaySize(W * 1.25, H * 1.15);
   const box = scene.add.container(W / 2, H / 2);
+  // 유리 패널 뒤 후광
+  const halo = scene.add.image(0, 0, 'ptc_glow').setDisplaySize(width * 1.6, height * 1.35).setTint(0xBFEFFF).setAlpha(0.45).setBlendMode(Phaser.BlendModes.ADD);
   const panel = scene.add.nineslice(0, 0, 'popup_panel', null, width, height, 96, 96, 96, 96);
-  box.add(panel);
+  box.add([halo, panel]);
   if (title) {
     const rib = scene.add.image(0, -height / 2 + 10, 'popup_ribbon').setDisplaySize(Math.min(width + 120, 980), 220);
     const tt = scene.add.text(0, -height / 2 - 4, title, { ...TXT.big, stroke: '#0B3E8A' }).setOrigin(0.5);
     box.add([rib, tt]);
   }
-  layer.add([dim, box]);
+  layer.add([dim, vig, box]);
+  vig.alpha = 0; scene.tweens.add({ targets: vig, alpha: 1, duration: 250 });
   const close = (silent) => {
     if (layer.closing) return; layer.closing = true;
     if (!silent) audio.play('sfx_popup_close');
     scene.tweens.add({ targets: box, scale: 0.8, alpha: 0, duration: 160, ease: 'Back.In' });
-    scene.tweens.add({ targets: dim, alpha: 0, duration: 180, onComplete: () => { layer.destroy(); onClose && onClose(); } });
+    scene.tweens.add({ targets: [dim, vig], alpha: 0, duration: 180, onComplete: () => { layer.destroy(); onClose && onClose(); } });
   };
   if (closeButton) {
     const x = iconButton(scene, width / 2 - 30, -height / 2 + 30, 'ico_plus', () => close(), { size: 110, bg: 'btn_close' });
     x.icon.setVisible(false);
     box.add(x);
   }
-  box.setScale(0.7); box.alpha = 0;
-  scene.tweens.add({ targets: box, scale: 1, alpha: 1, duration: 260, ease: 'Back.Out' });
+  box.setScale(0.82); box.alpha = 0; box.y += 40;
+  scene.tweens.add({ targets: box, scale: 1, alpha: 1, y: H / 2, duration: 320, ease: 'Back.Out' });
   audio.play('sfx_popup_open');
   layer.box = box; layer.close = close; layer.panelH = height; layer.panelW = width;
   return layer;
@@ -99,3 +110,14 @@ export function label(scene, x, y, text, style = TXT.mid) {
 }
 
 export { FONT, INK };
+
+// 빛 계열 이미지(빛·빛줄기·고리·반짝이·폭발 시트)는 가산 혼합으로 그려서 실제로 빛나 보이게
+const GLOW = new Set(['ptc_glow', 'ptc_rays', 'ptc_ring', 'ptc_spark', 'fx_bomb', 'fx_rainbow_orb', 'fx_special_create', 'fx_star_burst', 'fx_line_h', 'fx_line_v', 'fx_rainbow_beam']);
+export function enableGlow(scene) {
+  if (scene.__glowOn) return;        // scene.restart 때 같은 장면 객체가 재사용되므로 한 번만 등록
+  scene.__glowOn = true;
+  scene.events.on(Phaser.Scenes.Events.ADDED_TO_SCENE, go => {
+    const k = go.texture && go.texture.key;
+    if (k && GLOW.has(k) && go.blendMode === Phaser.BlendModes.NORMAL) go.setBlendMode(Phaser.BlendModes.ADD);
+  });
+}

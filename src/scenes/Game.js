@@ -6,7 +6,7 @@ import { t } from '../i18n.js';
 import { audio, WORLD_BGM } from '../audio.js';
 import { pickTip } from '../tips.js';
 import { load, save, recordWin, addCoins, addBooster, spendCoins, useBooster } from '../save.js';
-import { button, iconButton, popup, toast, starsRow } from '../ui/widgets.js';
+import { button, iconButton, popup, toast, starsRow, enableGlow } from '../ui/widgets.js';
 
 const BOARD_TOP = 436;
 // 별 게이지: 별 3개를 같은 간격에 두고, 점수는 별 사이 구간별로 선형 보간 (기준 점수 간격이 달라도 보기 좋게)
@@ -51,6 +51,7 @@ export class GameScene extends Phaser.Scene {
 
 
   create() {
+    enableGlow(this);
     const s = this.engine.s;
     this.boardBottom = H - 270;
     const bg = this.add.image(W / 2, H / 2, `bg_game_${this.level.world}`);

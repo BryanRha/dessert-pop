@@ -4,7 +4,7 @@ import { t } from '../i18n.js';
 import { audio } from '../audio.js';
 import { load, save, totalStars } from '../save.js';
 import { LEVELS } from '../core/levels.js';
-import { popup, button, iconButton, toast } from '../ui/widgets.js';
+import { popup, button, iconButton, toast, enableGlow } from '../ui/widgets.js';
 
 const WORLD_H = 3840;
 const WORLDS = WORLD_COUNT;
@@ -45,6 +45,7 @@ export class MapScene extends Phaser.Scene {
   constructor() { super('Map'); }
 
   create(data = {}) {
+    enableGlow(this);
     const d = load();
     this.cameras.main.setBounds(0, 0, W, TOTAL_H);
     // 배경 (아래가 월드 1)

@@ -1,6 +1,6 @@
 // 화면·게임 공통 상수
 // 화면 아래에 표시되는 버전 (배포할 때마다 올림)
-export const VERSION = '1.4.2';
+export const VERSION = '1.5.0';
 export const W = 1080;
 export const BASE_H = 1920;
 // 실제 세로 길이 (세로로 긴 폰에서는 1920 보다 커짐). ES 모듈 live binding 이라 import 한 곳에서도 갱신된 값이 보인다.
@@ -25,10 +25,11 @@ export const MAP_THEME = [
 export const LEVELS_PER_WORLD = 10;
 
 // 텍스트 스타일 프리셋
+const SHADOW = { offsetX: 0, offsetY: 5, color: 'rgba(6,32,74,0.45)', blur: 10, stroke: true, fill: true };
 export const TXT = {
-  title: { fontFamily: FONT, fontSize: '84px', color: '#ffffff', stroke: INK, strokeThickness: 14 },
-  big: { fontFamily: FONT, fontSize: '64px', color: '#ffffff', stroke: INK, strokeThickness: 12 },
-  mid: { fontFamily: FONT, fontSize: '48px', color: '#ffffff', stroke: INK, strokeThickness: 10 },
+  title: { fontFamily: FONT, fontSize: '84px', color: '#ffffff', stroke: INK, strokeThickness: 14, shadow: SHADOW },
+  big: { fontFamily: FONT, fontSize: '64px', color: '#ffffff', stroke: INK, strokeThickness: 12, shadow: SHADOW },
+  mid: { fontFamily: FONT, fontSize: '48px', color: '#ffffff', stroke: INK, strokeThickness: 10, shadow: { ...SHADOW, offsetY: 4, blur: 8 } },
   small: { fontFamily: FONT, fontSize: '36px', color: '#ffffff', stroke: INK, strokeThickness: 8 },
   body: { fontFamily: FONT, fontSize: '40px', color: INK, align: 'center', wordWrap: { width: 700, useAdvancedWrap: true } },
   dark: { fontFamily: FONT, fontSize: '44px', color: INK },
