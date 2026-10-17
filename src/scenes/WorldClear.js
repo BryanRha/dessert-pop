@@ -2,7 +2,7 @@
 //  1 고래 떼 유영 · 2 바다거북 대이동 · 3 해파리 빛 축제 · 4 흰동가리 소용돌이 · 5 보물상자 폭발
 //  6 복어 풍선과 눈꽃 · 7 진주 비 · 8 문어 먹물 불꽃놀이 · 9 불가사리 별자리 · 10 모든 친구 그랜드 피날레
 // 보스(10번째) 레벨을 처음 깼을 때 Game → WorldClear → Map(새 월드로 카메라 이동) 순서로 나온다.
-import { W, H, TXT, MAP_THEME, WORLD_COUNT } from '../config.js';
+import { W, H, TXT, MAP_THEME, WORLD_COUNT, themeOf } from '../config.js';
 import { t } from '../i18n.js';
 import { enableGlow } from '../ui/widgets.js';
 import { audio } from '../audio.js';
@@ -18,7 +18,7 @@ export class WorldClearScene extends Phaser.Scene {
   init({ world = 1 } = {}) { this.next = Math.min(WORLD_COUNT, world + 1); }
   // 새 월드의 게임 배경을 깔아 '새 바다에 도착한' 느낌 (다른 월드 배경은 메모리에서 내림)
   preload() {
-    const key = `bg_game_${this.next}`;
+    const key = `bg_game_${themeOf(this.next)}`;
     for (const k of this.textures.getTextureKeys()) if (k.startsWith('bg_game_') && k !== key) this.textures.remove(k);
     if (!this.textures.exists(key)) this.load.image(key, asset(`assets/img/${key}.png`));
   }
@@ -33,7 +33,7 @@ export class WorldClearScene extends Phaser.Scene {
 
     // ── 바다 배경 (새 월드 그림) + 흔들리는 빛줄기
     this.add.graphics().fillGradientStyle(hex(top), hex(top), hex(bottom), hex(bottom), 1).fillRect(0, 0, W, H);
-    const bg = this.add.image(W / 2, H / 2, `bg_game_${next}`);
+    const bg = this.add.image(W / 2, H / 2, `bg_game_${themeOf(next)}`);
     bg.setScale(Math.max(W / bg.width, H / bg.height));
     for (let i = 0; i < 6; i++) {
       const ray = this.add.rectangle(120 + i * 180, -100, 120, H * 1.6, 0xffffff, 0.07).setOrigin(0.5, 0).setAngle(-12 + i * 2);
@@ -102,7 +102,7 @@ export class WorldClearScene extends Phaser.Scene {
   // ═══ 월드별 쇼 (깊이 2~7: 몽이(8)·행진(9)·글자(11) 뒤) ═══════════════
   show(world) {
     const shows = [null, this.whales, this.turtles, this.jellies, this.clownSwirl, this.treasure, this.puffers, this.pearlRain, this.inkFireworks, this.starfish, this.finale];
-    (shows[world] || this.whales).call(this);
+    (world >= WORLD_COUNT ? this.finale : shows[themeOf(world)] || this.whales).call(this);
   }
 
   burst(x, y, key, n, { tints = null, dist = 260, scale = 0.5, depth = 6, dur = 900 } = {}) {

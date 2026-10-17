@@ -1,4 +1,4 @@
-// 월드맵: 10개 월드를 세로로 이어 붙이고, 100개 레벨 노드를 구불구불한 길로 연결한다.
+// 월드맵: 월드(10레벨씩)를 세로로 이어 붙이고, 레벨 노드를 구불구불한 길로 연결한다. 화면 근처 월드만 그린다.
 import { W, H, TXT, INK, WORLD_COUNT, MAP_THEME } from '../config.js';
 import { t } from '../i18n.js';
 import { audio } from '../audio.js';
@@ -54,80 +54,9 @@ export class MapScene extends Phaser.Scene {
     enableGlow(this);
     const d = load();
     this.cameras.main.setBounds(0, 0, W, TOTAL_H + DOCK_PAD);
-    // 배경 (아래가 월드 1)
-    this.bgLayers = [];
-    for (let w = 1; w <= WORLDS; w++) {
-      this.bgLayers.push(this.drawWorld(w));
-      const banner = this.add.image(W / 2, (WORLDS - w + 1) * WORLD_H - 120, 'popup_ribbon').setDisplaySize(760, 170).setDepth(3);
-      this.add.text(W / 2, banner.y - 8, `${w}. ${t('worldName')[w - 1]}`, { ...TXT.mid, stroke: '#0B3E8A' }).setOrigin(0.5).setDepth(4);
-    }
-    // 길 좌표를 먼저 계산 (장식 배치와 점선 그리기에 함께 사용)
-    const path = [];
-    for (let id = 1; id < LEVELS.length; id++) {
-      const a = nodePos(id), b = nodePos(id + 1);
-      const n = Math.floor(Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y) / 62);
-      const cx = (a.x + b.x) / 2 + (a.x < b.x ? -60 : 60), cy = (a.y + b.y) / 2;
-      for (let i = 1; i < n; i++) {
-        const tt = i / n;
-        path.push({ id, x: (1 - tt) ** 2 * a.x + 2 * (1 - tt) * tt * cx + tt * tt * b.x, y: (1 - tt) ** 2 * a.y + 2 * (1 - tt) * tt * cy + tt * tt * b.y });
-      }
-    }
-    const nodes = LEVELS.map(l => nodePos(l.id));
-    const banners = Array.from({ length: WORLDS }, (_, i) => (WORLDS - i) * WORLD_H - 120);
-    // 노드(번호 + 아래 별 줄)와 배너 영역은 비워 둔다
-    const nearNode = (x, y, pad = 0) => nodes.some(n => Math.abs(x - n.x) < 100 + pad && y > n.y - 110 - pad && y < n.y + 135 + pad);
-    const nearBanner = (x, y, pad = 0) => banners.some(by => Math.abs(y - by) < 100 + pad && Math.abs(x - W / 2) < 420 + pad);
-    // 장식: 길·노드·배너에서 충분히 떨어진 곳에만
-    const rnd = new Phaser.Math.RandomDataGenerator(['ocean-map']);
-    for (let w = 1; w <= WORLDS; w++) {
-      let placed = 0;
-      for (let tries = 0; tries < 200 && placed < 14; tries++) {
-        const y = (WORLDS - w) * WORLD_H + 260 + rnd.frac() * (WORLD_H - 520);
-        const x = 90 + rnd.frac() * (W - 180);
-        if (nearNode(x, y, 90) || nearBanner(x, y, 60) || path.some(pt => Math.hypot(pt.x - x, pt.y - y) < 150)) continue;
-        const key = `map_deco_${rnd.pick(DECOS)}`;
-        const s = this.add.image(x, y, key).setScale(0.45 + rnd.frac() * 0.3).setAlpha(0.95);
-        if (key.includes('bubbles') || key.includes('jellyfish')) { s.setAlpha(0.8); this.tweens.add({ targets: s, x: x + 30, yoyo: true, repeat: -1, duration: 4000 + rnd.frac() * 3000, ease: 'Sine.InOut' }); }
-        placed++;
-      }
-    }
-    // 길 점선
-    for (const pt of path) {
-      if (nearNode(pt.x, pt.y) || nearBanner(pt.x, pt.y)) continue;
-      this.add.image(pt.x, pt.y, 'map_path_dot').setAlpha(pt.id < d.unlocked ? 1 : 0.55);
-    }
-    // 노드
-    for (const lv of LEVELS) {
-      const { x, y } = nodePos(lv.id);
-      const unlocked = lv.id <= d.unlocked;
-      const current = lv.id === d.unlocked;
-      const key = !unlocked ? 'map_node_locked' : current ? 'map_node_current' : lv.boss ? 'map_node_boss' : 'map_node_open';
-      const node = this.add.image(x, y, key).setScale(current || lv.boss ? 0.95 : 0.9);
-      if (unlocked) {
-        this.add.text(x, y - 10, `${lv.id}`, { ...TXT.big, fontSize: '68px' }).setOrigin(0.5);
-        const st = d.stars[lv.id] || 0;
-        for (let i = 0; i < 3; i++) this.add.image(x + (i - 1) * 46, y + 80 + (i === 1 ? 8 : 0), i < st ? 'star_small_on' : 'star_small_off').setScale(1);
-        node.setInteractive({ useHandCursor: true });
-        node.on('pointerup', (p) => { if (this.dragDist < 20) { audio.play('sfx_click'); this.openLevel(lv.id); } });
-      }
-      if (current && (d.seenUnlocked || 1) < lv.id) {
-        // 새로 열린 레벨: 노드가 튀어나오는 연출
-        const base = node.scale; node.setScale(0);
-        const popDelay = data.arrive ? 2100 : 450;
-        this.tweens.add({ targets: node, scale: base, delay: popDelay, duration: 450, ease: 'Back.Out', onStart: () => audio.play('sfx_special_create') });
-        for (let i = 0; i < 10; i++) {
-          const p = this.add.image(x, y, 'ptc_star').setScale(0.4).setTint(0xFFD23F).setAlpha(0);
-          const a = (i / 10) * Math.PI * 2;
-          this.tweens.add({ targets: p, x: x + Math.cos(a) * 180, y: y + Math.sin(a) * 180, alpha: { from: 1, to: 0 }, delay: popDelay + 50, duration: 700, onComplete: () => p.destroy() });
-        }
-        d.seenUnlocked = lv.id; save();
-      }
-      if (current) {
-        this.tweens.add({ targets: node, scale: 1.02, yoyo: true, repeat: -1, duration: 600, delay: 1000 });
-        const mk = this.add.image(x, y - 150, 'map_player_marker').setScale(0.85);
-        this.tweens.add({ targets: mk, y: mk.y - 26, yoyo: true, repeat: -1, duration: 550, ease: 'Sine.InOut' });
-      }
-    }
+    // 월드는 화면 근처 것만 그린다 (500레벨 · 50월드를 한꺼번에 만들면 폰에서 무거움) → syncWorlds()
+    this.built = new Map();
+    this.mapData = data;
     // 고정 UI
     const top = this.add.image(W / 2, 0, 'hud_topbar').setOrigin(0.5, 0).setScrollFactor(0).setScale(1, 0.62);
     iconButton(this, 90, 85, 'ico_home', () => this.scene.start('Title'), { size: 120 }).setScrollFactor(0);
@@ -144,7 +73,7 @@ export class MapScene extends Phaser.Scene {
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Reef'));
     };
     const reefCount = () => {
-      const maxW = Math.min(10, Math.ceil(Math.min(d.unlocked, 100) / 10));
+      const maxW = Math.min(WORLDS, Math.ceil(Math.min(d.unlocked, LEVELS.length) / 10));
       for (let w = 1; w <= maxW; w++) { const n = d.restore[w] || 0; if (n < RESTORE_TASKS && availableStars() >= taskCost(w, n)) return 1; }
       return 0;
     };
@@ -177,6 +106,7 @@ export class MapScene extends Phaser.Scene {
       this.cameras.main.scrollY = clampY(from.y);
       this.tweens.add({ targets: this.cameras.main, scrollY: clampY(focus.y), delay: 500, duration: 1500, ease: 'Sine.InOut' });
     }
+    this.syncWorlds();
     this.dragDist = 0; this.vel = 0;
     this.input.on('pointerdown', p => { this.dragDist = 0; this.lastY = p.y; this.vel = 0; });
     this.input.on('pointermove', p => {
@@ -191,6 +121,92 @@ export class MapScene extends Phaser.Scene {
     audio.music('bgm_map', this);
     this.cameras.main.fadeIn(250, 189, 235, 255);
     if (data.celebrate && d.unlocked > LEVELS.length) toast(this, t('allClear'));
+  }
+
+  // 카메라 근처(위아래 한 월드 여유) 월드만 만들고, 멀어진 월드는 지움
+  syncWorlds() {
+    const cam = this.cameras.main;
+    const top = cam.scrollY - WORLD_H * 0.6, bottom = cam.scrollY + H + WORLD_H * 0.6;
+    const want = new Set();
+    for (let w = 1; w <= WORLDS; w++) { const y0 = (WORLDS - w) * WORLD_H; if (y0 < bottom && y0 + WORLD_H > top) want.add(w); }
+    for (const [w, c] of this.built) if (!want.has(w)) { this.tweens.killTweensOf(c.list); c.destroy(); this.built.delete(w); }
+    for (const w of want) if (!this.built.has(w)) this.built.set(w, this.buildWorld(w));
+  }
+
+  buildWorld(w) {
+    const d = load(), data = this.mapData || {};
+    const c = this.add.container(0, 0);
+    const add = o => { c.add(o); return o; };
+    add(this.drawWorld(w));
+    const first = (w - 1) * 10 + 1, last = Math.min(LEVELS.length, w * 10);
+    // 길: 이 월드 레벨들 + 다음 월드 첫 레벨로 이어지는 구간
+    const path = [];
+    for (let id = first; id <= last && id < LEVELS.length; id++) {
+      const a = nodePos(id), b = nodePos(id + 1);
+      const n = Math.floor(Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y) / 62);
+      const cx = (a.x + b.x) / 2 + (a.x < b.x ? -60 : 60), cy = (a.y + b.y) / 2;
+      for (let i = 1; i < n; i++) {
+        const tt = i / n;
+        path.push({ id, x: (1 - tt) ** 2 * a.x + 2 * (1 - tt) * tt * cx + tt * tt * b.x, y: (1 - tt) ** 2 * a.y + 2 * (1 - tt) * tt * cy + tt * tt * b.y });
+      }
+    }
+    const nodes = []; for (let id = Math.max(1, first - 1); id <= Math.min(LEVELS.length, last + 1); id++) nodes.push(nodePos(id));
+    const bannerY = (WORLDS - w + 1) * WORLD_H - 120;
+    const nearNode = (x, y, pad = 0) => nodes.some(n => Math.abs(x - n.x) < 100 + pad && y > n.y - 110 - pad && y < n.y + 135 + pad);
+    const nearBanner = (x, y, pad = 0) => [bannerY, bannerY - WORLD_H].some(by => Math.abs(y - by) < 100 + pad && Math.abs(x - W / 2) < 420 + pad);
+    // 장식 (월드마다 같은 배치가 나오게 월드 번호로 씨앗)
+    const rnd = new Phaser.Math.RandomDataGenerator([`ocean-map-${w}`]);
+    let placed = 0;
+    for (let tries = 0; tries < 200 && placed < 14; tries++) {
+      const y = (WORLDS - w) * WORLD_H + 260 + rnd.frac() * (WORLD_H - 520);
+      const x = 90 + rnd.frac() * (W - 180);
+      if (nearNode(x, y, 90) || nearBanner(x, y, 60) || path.some(pt => Math.hypot(pt.x - x, pt.y - y) < 150)) continue;
+      const key = `map_deco_${rnd.pick(DECOS)}`;
+      const sp = add(this.add.image(x, y, key).setScale(0.45 + rnd.frac() * 0.3).setAlpha(0.95));
+      if (key.includes('bubbles') || key.includes('jellyfish')) { sp.setAlpha(0.8); this.tweens.add({ targets: sp, x: x + 30, yoyo: true, repeat: -1, duration: 4000 + rnd.frac() * 3000, ease: 'Sine.InOut' }); }
+      placed++;
+    }
+    for (const pt of path) {
+      if (nearNode(pt.x, pt.y) || nearBanner(pt.x, pt.y)) continue;
+      add(this.add.image(pt.x, pt.y, 'map_path_dot').setAlpha(pt.id < d.unlocked ? 1 : 0.55));
+    }
+    // 노드
+    for (let id = first; id <= last; id++) {
+      const lv = LEVELS[id - 1];
+      const { x, y } = nodePos(id);
+      const unlocked = id <= d.unlocked, current = id === d.unlocked;
+      const key = !unlocked ? 'map_node_locked' : current ? 'map_node_current' : lv.boss ? 'map_node_boss' : 'map_node_open';
+      const node = add(this.add.image(x, y, key).setScale(current || lv.boss ? 0.95 : 0.9));
+      if (unlocked) {
+        // 번호는 비트맵 글꼴 (글자 객체 500개를 만들지 않도록)
+        add(this.add.bitmapText(x, y - 8, 'font_num_white', `${id}`, id >= 100 ? 50 : 62).setOrigin(0.5));
+        const st = d.stars[id] || 0;
+        for (let i = 0; i < 3; i++) add(this.add.image(x + (i - 1) * 46, y + 80 + (i === 1 ? 8 : 0), i < st ? 'star_small_on' : 'star_small_off'));
+        node.setInteractive({ useHandCursor: true });
+        node.on('pointerup', () => { if (this.dragDist < 20) { audio.play('sfx_click'); this.openLevel(id); } });
+      }
+      if (current && (d.seenUnlocked || 1) < id) {
+        // 새로 열린 레벨: 노드가 튀어나오는 연출
+        const base = node.scale; node.setScale(0);
+        const popDelay = data.arrive ? 2100 : 450;
+        this.tweens.add({ targets: node, scale: base, delay: popDelay, duration: 450, ease: 'Back.Out', onStart: () => audio.play('sfx_special_create') });
+        for (let i = 0; i < 10; i++) {
+          const p = add(this.add.image(x, y, 'ptc_star').setScale(0.4).setTint(0xFFD23F).setAlpha(0));
+          const a = (i / 10) * Math.PI * 2;
+          this.tweens.add({ targets: p, x: x + Math.cos(a) * 180, y: y + Math.sin(a) * 180, alpha: { from: 1, to: 0 }, delay: popDelay + 50, duration: 700, onComplete: () => p.destroy() });
+        }
+        d.seenUnlocked = id; save();
+      }
+      if (current) {
+        this.tweens.add({ targets: node, scale: 1.02, yoyo: true, repeat: -1, duration: 600, delay: 1000 });
+        const mk = add(this.add.image(x, y - 150, 'map_player_marker').setScale(0.85));
+        this.tweens.add({ targets: mk, y: mk.y - 26, yoyo: true, repeat: -1, duration: 550, ease: 'Sine.InOut' });
+      }
+    }
+    // 월드 이름 배너
+    add(this.add.image(W / 2, bannerY, 'popup_ribbon').setDisplaySize(760, 170));
+    add(this.add.text(W / 2, bannerY - 8, `${w}. ${t('worldName')[w - 1]}`, { ...TXT.mid, stroke: '#0B3E8A' }).setOrigin(0.5));
+    return c;
   }
 
   // 월드 한 칸 배경: 위→아래 그라데이션 + 모래·물빛 무늬 + 물결 + 물방울 (화면 밖 월드는 update 에서 숨김)
@@ -229,8 +245,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   update() {
-    const cam = this.cameras.main;
-    for (const g of this.bgLayers || []) g.setVisible(g.y0 < cam.scrollY + H && g.y0 + WORLD_H > cam.scrollY);
+    this.syncWorlds();
     if (!this.input.activePointer.isDown && Math.abs(this.vel) > 0.5) {
       this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + this.vel, 0, TOTAL_H + DOCK_PAD - H);
       this.vel *= 0.92;

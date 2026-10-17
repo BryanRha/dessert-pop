@@ -636,10 +636,37 @@ export class Engine {
       if (!this.findMatches().length && this.possibleMoves(1).length) break;
       if (attempt > 60) { // 색을 다시 뽑아서라도 해결
         pos.forEach(([r, c]) => { const p = this.s.cells[r][c].p; if (!p.sp) p.c = this.safeColor(r, c); });
-        if (this.possibleMoves(1).length) break;
+        this.fixMatches(pos);
+        if (!this.findMatches().length && this.possibleMoves(1).length) break;
       }
     }
+    this.fixMatches(pos);
     if (steps) this.push(steps, { type: 'shuffle', items: pos.map(([r, c]) => ({ at: [r, c], id: this.s.cells[r][c].p.id, c: this.s.cells[r][c].p.c, sp: this.s.cells[r][c].p.sp })) });
+  }
+
+  // 셔플 뒤 남은 매치 정리: 움직일 수 있는 칸의 색만 바꿔서, 고정된 블록(어망 등)과 이어진 줄까지 없앤다
+  matchAt(r, c) {
+    const p = this.cell(r, c).p;
+    const same = (rr, cc) => { const cl = this.cell(rr, cc); return cl && this.matchable(cl) && cl.p.c === p.c; };
+    let h = 1, v = 1;
+    for (let x = c - 1; same(r, x); x--) h++;
+    for (let x = c + 1; same(r, x); x++) h++;
+    for (let y = r - 1; same(y, c); y--) v++;
+    for (let y = r + 1; same(y, c); y++) v++;
+    return h >= 3 || v >= 3;
+  }
+  fixMatches(pos) {
+    const free = new Set(pos.map(([r, c]) => `${r},${c}`));
+    for (let k = 0; k < 40; k++) {
+      const ms = this.findMatches();
+      if (!ms.length) return;
+      for (const m of ms) {
+        const cell = m.cells.find(([r, c]) => free.has(`${r},${c}`) && !this.s.cells[r][c].p.sp);
+        if (!cell) continue;
+        const [r, c] = cell, p = this.s.cells[r][c].p;
+        for (let t = 0; t < this.s.nColors; t++) { p.c = (p.c + 1) % this.s.nColors; if (!this.matchAt(r, c)) break; }
+      }
+    }
   }
 
   // ── 클리어 보너스: 남은 이동 수만큼 줄무늬 블록 → 전부 발동 ──

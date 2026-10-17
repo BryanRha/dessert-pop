@@ -1,5 +1,5 @@
 // 인게임: 엔진(core/engine.js)이 만든 steps 를 순서대로 애니메이션으로 재생한다.
-import { W, H, CELL, TXT, COLOR_HEX, COLOR_NAMES, BOOSTER_PRICE, asset } from '../config.js';
+import { W, H, CELL, TXT, COLOR_HEX, COLOR_NAMES, BOOSTER_PRICE, asset, themeOf } from '../config.js';
 import { Engine } from '../core/engine.js';
 import { LEVELS } from '../core/levels.js';
 import { t } from '../i18n.js';
@@ -45,7 +45,7 @@ export class GameScene extends Phaser.Scene {
   }
   preload() {
     // 이 월드 배경만 메모리에 둔다 (10개 월드 배경을 한꺼번에 올리면 폰 GPU 메모리가 부족)
-    const key = `bg_game_${this.level.world}`;
+    const key = `bg_game_${themeOf(this.level.world)}`;
     for (const k of this.textures.getTextureKeys()) if (k.startsWith('bg_game_') && k !== key) this.textures.remove(k);
     if (!this.textures.exists(key)) this.load.image(key, asset(`assets/img/${key}.png`));
   }
@@ -57,7 +57,7 @@ export class GameScene extends Phaser.Scene {
     this.events.once('shutdown', offMission);
     const s = this.engine.s;
     this.boardBottom = H - 270;
-    const bg = this.add.image(W / 2, H / 2, `bg_game_${this.level.world}`);
+    const bg = this.add.image(W / 2, H / 2, `bg_game_${themeOf(this.level.world)}`);
     bg.setScale(Math.max(W / bg.width, H / bg.height));
     // 보드 배율: 작은 보드는 화면에 맞게 키움 (최대 1.3배). 보드 레이어들은 모두 같은 변환(ox, oy, k)을 쓴다.
     const availH = this.boardBottom - BOARD_TOP - 60;

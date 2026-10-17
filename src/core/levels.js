@@ -2,6 +2,7 @@
 // stars / moves 는 tools/tune.js 가 봇 시뮬레이션으로 계산한 levels_tuning.js 값을 덮어쓴다.
 import { TUNING } from './levels_tuning.js';
 import { MORE } from './levels_more.js';
+import { GEN } from './levels_gen.js';
 
 const fill = (w, h, ch = '.') => Array.from({ length: h }, () => ch.repeat(w));
 
@@ -84,5 +85,5 @@ const RAW = [
 export const WORLD_OF = id => Math.ceil(id / 10);
 
 // 원본 정의 (튜너는 이걸로 시작) / 튜닝 결과를 덮어쓴 실제 게임용 레벨
-export const BASE_LEVELS = [...RAW, ...MORE].map(l => ({ world: WORLD_OF(l.id), stars: [1500, 3000, 4500], ...l }));
+export const BASE_LEVELS = [...RAW, ...MORE, ...GEN].map(l => ({ world: WORLD_OF(l.id), stars: [1500, 3000, 4500], ...l }));
 export const LEVELS = BASE_LEVELS.map(l => ({ ...l, ...(TUNING[l.id] || {}) }));

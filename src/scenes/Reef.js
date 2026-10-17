@@ -1,6 +1,6 @@
 // 바다 복원: 모은 별로 오염된 바다를 하나씩 되살린다.
 // 처음엔 탁한 물 + 기름띠 + 버려진 그물 + 회색 실루엣. 과제를 해결할수록 물이 맑아지고 산호·해초·친구들이 돌아온다.
-import { W, H, TXT, WORLD_COUNT, LEVELS_PER_WORLD, asset } from '../config.js';
+import { W, H, TXT, WORLD_COUNT, LEVELS_PER_WORLD, asset, themeOf } from '../config.js';
 import { t } from '../i18n.js';
 import { audio } from '../audio.js';
 import { load, save, availableStars, spendStars, addCoins, addBooster } from '../save.js';
@@ -24,7 +24,7 @@ export class ReefScene extends Phaser.Scene {
   }
 
   preload() {
-    const key = `bg_game_${this.world}`;
+    const key = `bg_game_${themeOf(this.world)}`;
     for (const k of this.textures.getTextureKeys()) if (k.startsWith('bg_game_') && k !== key) this.textures.remove(k);
     if (!this.textures.exists(key)) this.load.image(key, asset(`assets/img/${key}.png`));
   }
@@ -37,7 +37,7 @@ export class ReefScene extends Phaser.Scene {
     const th = restoreTheme(w);
     const floorY = H - 540;
 
-    const bg = this.add.image(W / 2, H / 2, `bg_game_${w}`);
+    const bg = this.add.image(W / 2, H / 2, `bg_game_${themeOf(w)}`);
     bg.setScale(Math.max(W / bg.width, H / bg.height));
     this.bg = bg;
     // 탁한 물 (복원할수록 옅어짐)

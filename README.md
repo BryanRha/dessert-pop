@@ -89,6 +89,7 @@ node flow.mjs ./shots                              # 첫 실행 흐름(타이틀
 ### 레벨 추가하기
 
 레벨 1~30 은 `src/core/levels.js` 의 `RAW`, 31~100 은 `src/core/levels_more.js` 의 `MORE` 배열.
+101~500 은 `tools/genlevels.js` 가 만든 `src/core/levels_gen.js` (직접 수정 금지). 테마별 기믹과 모양 라이브러리로 생성하고, `node tools/gen500.js` 가 생성 → 7개 병렬 튜닝 → 이동 수가 15~32 밖이면 모양(variant, `tools/levelgen_variants.json`)을 바꿔 다시 만드는 과정을 반복한다.
 31 이후는 좌표 함수로 모양을 만든다 (`L({ w, h, hole, piece, jelly, cover })`). 문자 규칙은 `engine.js` 상단 주석 참고.
 
 ```js
@@ -96,7 +97,7 @@ L({ id: 101, goals: [{ type: 'jelly' }], jelly: (x, y) => (y >= 6 ? '1' : null) 
 ```
 
 추가 후 `node tools/tune.js 60 101` 을 돌리면 이동 수·목표량·별 기준이 자동으로 맞춰진다.
-월드를 늘리면 `config.js` 의 `WORLD_COUNT`·`MAP_THEME`, `i18n.js` 의 `worldName`, `gen_sea_scenes.py` 의 `WORLDS`(게임 배경)를 함께 늘린다.
+월드는 50개(10레벨씩). 그림·지도색·복원·클리어 연출은 10가지 테마를 돌려 쓴다(`config.js` 의 `themeOf`). 월드를 늘리면 `WORLD_COUNT`, `i18n.js` 의 `worldName` 을 함께 늘린다. 지도는 화면 근처 월드만 만든다(`Map.syncWorlds`).
 월드 맵은 10레벨 단위로 월드가 바뀐다 (`WORLD_OF`).
 
 ### 리소스 수정하기

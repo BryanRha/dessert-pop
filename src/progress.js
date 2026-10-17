@@ -23,7 +23,7 @@ export function stat(name) {
   switch (name) {
     case 'unlocked': return d.unlocked;
     case 'starsTotal': return totalStars();
-    case 'worldsCleared': return Math.min(10, Math.floor((d.unlocked - 1) / 10));
+    case 'worldsCleared': return Math.floor((d.unlocked - 1) / 10);
     case 'reefWorlds': return Object.values(d.restore || {}).filter(n => n >= 6).length;
     case 'dailyCount': return (d.daily && d.daily.count) || 0;
     default:
@@ -43,9 +43,9 @@ export const DEX = [
   { id: 'starfish', key: 'item_collect_star', stat: 'star', tiers: [10, 60, 200] },
   { id: 'babyfish', key: 'item_drop_a', stat: 'rescue_a', tiers: [3, 15, 50] },
   { id: 'seahorse', key: 'item_drop_b', stat: 'rescue_b', tiers: [3, 15, 50] },
-  { id: 'jellyfish', key: 'map_deco_jellyfish', stat: 'worldsCleared', tiers: [3, 6, 10] },
-  { id: 'coral', key: 'map_deco_coral_tree', stat: 'restore', tiers: [6, 30, 60] },
-  { id: 'mongi', key: 'mascot_happy', stat: 'win', tiers: [10, 50, 100] },
+  { id: 'jellyfish', key: 'map_deco_jellyfish', stat: 'worldsCleared', tiers: [3, 15, 40] },
+  { id: 'coral', key: 'map_deco_coral_tree', stat: 'restore', tiers: [6, 60, 240] },
+  { id: 'mongi', key: 'mascot_happy', stat: 'win', tiers: [10, 100, 500] },
 ];
 export const DEX_COINS = [50, 100, 200];
 
@@ -66,10 +66,14 @@ export const ACH = [
   { id: 'lv10', stat: 'unlocked', n: 11, coins: 100 },
   { id: 'lv30', stat: 'unlocked', n: 31, coins: 150 },
   { id: 'lv60', stat: 'unlocked', n: 61, coins: 200 },
-  { id: 'lv100', stat: 'unlocked', n: 101, coins: 500 },
+  { id: 'lv100', stat: 'unlocked', n: 101, coins: 300 },
+  { id: 'lv200', stat: 'unlocked', n: 201, coins: 400 },
+  { id: 'lv500', stat: 'unlocked', n: 501, coins: 1000 },
   { id: 'stars50', stat: 'starsTotal', n: 50, coins: 100 },
   { id: 'stars150', stat: 'starsTotal', n: 150, coins: 200 },
-  { id: 'stars300', stat: 'starsTotal', n: 300, coins: 500 },
+  { id: 'stars300', stat: 'starsTotal', n: 300, coins: 300 },
+  { id: 'stars800', stat: 'starsTotal', n: 800, coins: 500 },
+  { id: 'stars1500', stat: 'starsTotal', n: 1500, coins: 1000 },
   { id: 'pearl1', stat: 'pearl', n: 1, coins: 100 },
   { id: 'bomb100', stat: 'bomb', n: 100, coins: 150 },
   { id: 'line200', stat: 'line', n: 200, coins: 150 },
@@ -77,7 +81,8 @@ export const ACH = [
   { id: 'streak5', stat: 'maxStreak', n: 5, coins: 150 },
   { id: 'rescue20', stat: 'rescue_a', n: 20, coins: 150 },
   { id: 'reef1', stat: 'reefWorlds', n: 1, coins: 150 },
-  { id: 'reef10', stat: 'reefWorlds', n: 10, coins: 500 },
+  { id: 'reef10', stat: 'reefWorlds', n: 10, coins: 400 },
+  { id: 'reef50', stat: 'reefWorlds', n: 50, coins: 1000 },
   { id: 'daily7', stat: 'dailyCount', n: 7, coins: 150 },
   { id: 'daily30', stat: 'dailyCount', n: 30, coins: 400 },
   { id: 'mission10', stat: 'missionBonus', n: 10, coins: 300 },

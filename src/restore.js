@@ -17,5 +17,5 @@ export const RESTORE_TASKS = 6;
 export const TASK_COINS = 20;
 export const WORLD_COINS = 200;
 
-export function restoreTheme(world) { return THEME[world] || THEME[1]; }
+export function restoreTheme(world) { return THEME[((world - 1) % 10) + 1] || THEME[1]; }
 export function taskCost(world, i) { return BASE_COST[i] + (world >= 4 ? 1 : 0); }
