@@ -4,6 +4,7 @@ import { BootScene } from './scenes/Boot.js';
 import { TitleScene } from './scenes/Title.js';
 import { MapScene } from './scenes/Map.js';
 import { GameScene } from './scenes/Game.js';
+import { WorldClearScene } from './scenes/WorldClear.js';
 
 async function start() {
   try { await document.fonts.load('48px Jua'); } catch { /* 폰트 실패 시 기본 폰트 */ }
@@ -19,7 +20,7 @@ async function start() {
     scale: { mode: innerHeight / innerWidth > BASE_H / W ? Phaser.Scale.EXPAND : Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     render: { antialias: true, roundPixels: false },
     input: { activePointers: 1 },
-    scene: [BootScene, TitleScene, MapScene, GameScene],
+    scene: [BootScene, TitleScene, MapScene, GameScene, WorldClearScene],
   });
   audio.attach(game);
   setH(game.scale.height);

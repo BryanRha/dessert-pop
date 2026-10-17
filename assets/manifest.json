@@ -117,10 +117,19 @@
   "popup_deco_win",
   "popup_panel",
   "popup_ribbon",
+  "ptc_bubble",
   "ptc_confetti",
+  "ptc_crab",
+  "ptc_drop",
   "ptc_glow",
+  "ptc_hex",
+  "ptc_ink",
+  "ptc_rays",
+  "ptc_ring",
+  "ptc_scale",
   "ptc_shard",
   "ptc_spark",
+  "ptc_spike",
   "ptc_star",
   "star_big_off",
   "star_big_on",
@@ -160,7 +169,8 @@
   "txt_combo_5",
   "txt_level_clear",
   "txt_out_of_moves",
-  "txt_pearl_storm"
+  "txt_pearl_storm",
+  "txt_world_clear"
  ],
  "sheets": {
   "fx_pop": {
@@ -266,11 +276,18 @@
   "sfx_star_1",
   "sfx_star_2",
   "sfx_star_3",
+  "sfx_star_slam",
   "sfx_stone",
   "sfx_swap",
   "sfx_swap_invalid",
+  "sfx_whale",
+  "sfx_world_clear",
   "bgm_game_1",
+  "bgm_game_1_hi",
   "bgm_game_2",
+  "bgm_game_2_hi",
+  "bgm_game_3",
+  "bgm_game_3_hi",
   "bgm_map",
   "bgm_title"
  ]

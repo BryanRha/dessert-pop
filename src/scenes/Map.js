@@ -106,11 +106,12 @@ export class MapScene extends Phaser.Scene {
       if (current && (d.seenUnlocked || 1) < lv.id) {
         // 새로 열린 레벨: 노드가 튀어나오는 연출
         const base = node.scale; node.setScale(0);
-        this.tweens.add({ targets: node, scale: base, delay: 450, duration: 450, ease: 'Back.Out', onStart: () => audio.play('sfx_special_create') });
+        const popDelay = data.arrive ? 2100 : 450;
+        this.tweens.add({ targets: node, scale: base, delay: popDelay, duration: 450, ease: 'Back.Out', onStart: () => audio.play('sfx_special_create') });
         for (let i = 0; i < 10; i++) {
           const p = this.add.image(x, y, 'ptc_star').setScale(0.4).setTint(0xFFD23F).setAlpha(0);
           const a = (i / 10) * Math.PI * 2;
-          this.tweens.add({ targets: p, x: x + Math.cos(a) * 180, y: y + Math.sin(a) * 180, alpha: { from: 1, to: 0 }, delay: 500, duration: 700, onComplete: () => p.destroy() });
+          this.tweens.add({ targets: p, x: x + Math.cos(a) * 180, y: y + Math.sin(a) * 180, alpha: { from: 1, to: 0 }, delay: popDelay + 50, duration: 700, onComplete: () => p.destroy() });
         }
         d.seenUnlocked = lv.id; save();
       }
@@ -131,7 +132,14 @@ export class MapScene extends Phaser.Scene {
 
     // 스크롤
     const focus = nodePos(Math.min(d.unlocked, LEVELS.length));
-    this.cameras.main.scrollY = Phaser.Math.Clamp(focus.y - H * 0.6, 0, TOTAL_H - H);
+    const clampY = y => Phaser.Math.Clamp(y - H * 0.6, 0, TOTAL_H - H);
+    this.cameras.main.scrollY = clampY(focus.y);
+    if (data.arrive) {
+      // 월드 클리어 직후: 지난 월드 보스 노드에서 새 월드 첫 노드까지 카메라가 헤엄쳐 올라감
+      const from = nodePos(Math.max(1, (data.arrive - 1) * 10));
+      this.cameras.main.scrollY = clampY(from.y);
+      this.tweens.add({ targets: this.cameras.main, scrollY: clampY(focus.y), delay: 500, duration: 1500, ease: 'Sine.InOut' });
+    }
     this.dragDist = 0; this.vel = 0;
     this.input.on('pointerdown', p => { this.dragDist = 0; this.lastY = p.y; this.vel = 0; });
     this.input.on('pointermove', p => {
@@ -143,7 +151,7 @@ export class MapScene extends Phaser.Scene {
     });
     this.input.on('wheel', (p, o, dx, dy) => { this.cameras.main.scrollY = Phaser.Math.Clamp(this.cameras.main.scrollY + dy, 0, TOTAL_H - H); });
 
-    audio.music('bgm_map');
+    audio.music('bgm_map', this);
     this.cameras.main.fadeIn(250, 189, 235, 255);
     if (data.celebrate && d.unlocked > LEVELS.length) toast(this, t('allClear'));
   }

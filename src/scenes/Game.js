@@ -3,7 +3,8 @@ import { W, H, CELL, TXT, COLOR_HEX, COLOR_NAMES, BOOSTER_PRICE, asset } from '.
 import { Engine } from '../core/engine.js';
 import { LEVELS } from '../core/levels.js';
 import { t } from '../i18n.js';
-import { audio } from '../audio.js';
+import { audio, WORLD_BGM } from '../audio.js';
+import { pickTip } from '../tips.js';
 import { load, save, recordWin, addCoins, addBooster, spendCoins, useBooster } from '../save.js';
 import { button, iconButton, popup, toast, starsRow } from '../ui/widgets.js';
 
@@ -72,7 +73,8 @@ export class GameScene extends Phaser.Scene {
     this.buildHUD();
     this.buildBoosters();
     this.setupInput();
-    audio.music(this.level.world % 2 ? 'bgm_game_1' : 'bgm_game_2');
+    audio.music(`bgm_game_${WORLD_BGM[(this.level.world - 1) % WORLD_BGM.length]}`, this);
+    audio.intensity(0);
     this.cameras.main.fadeIn(250, 189, 235, 255);
     this.levelStartPopup();
   }
@@ -562,7 +564,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   async animMatch(st) {
-    audio.play(`sfx_match_${Math.min(5, st.level)}`);
+    const cells = st.groups.flatMap(g => g.cells);
+    const avgC = cells.length ? cells.reduce((a, [, c]) => a + c, 0) / cells.length : this.engine.s.w / 2;
+    audio.play(`sfx_match_${Math.min(5, st.level)}`, { pan: this.panOf(avgC) });
+    // 연쇄가 이어질수록 화면 흔들림·번쩍임·진동이 커짐
+    if (st.level >= 3) { this.cameras.main.shake(140 + st.level * 30, 0.002 * Math.min(st.level, 6)); audio.buzz(12 + st.level * 4); }
+    if (st.level >= 5) this.cameras.main.flash(120, 255, 255, 255, false);
     for (const c of st.created) {
       this.setPieceTexture(c.id, { sp: c.sp });
       const s = this.sprites.get(c.id);
@@ -582,21 +589,25 @@ export class GameScene extends Phaser.Scene {
 
   async animBlast(st) {
     let big = false, ripple = null; const centers = [];
+    // 히트스톱: 특수 블록이 터지는 순간 화면을 아주 잠깐 멈춰 '손맛'을 준다
+    const weight = Math.max(...st.fx.map(f => ({ lineH: 1, lineV: 1, bomb: 2, cross: 3, bigCross: 3, bigBomb: 3, rainbow: 2, rainbowAll: 4 }[f.fx] || 0)));
+    if (weight) await this.hitStop([0, 45, 70, 100, 140][weight]);
     for (const f of st.fx) {
       const at = f.at ? this.xy(...f.at) : { x: W / 2, y: H / 2 };
       const bw = this.engine.s.w * CELL, bh = this.engine.s.h * CELL;
-      const lineH = (r) => { const y = this.xy(r, 0).y; const s = this.add.sprite(bw / 2, y, 'fx_line_h').setDisplaySize(bw + 120, 130); this.fxLayer.add(s); s.play('fx_line_h'); s.once('animationcomplete', () => s.destroy()); };
-      const lineV = (c) => { const x = this.xy(0, c).x; const s = this.add.sprite(x, bh / 2, 'fx_line_v').setDisplaySize(130, bh + 120); this.fxLayer.add(s); s.play('fx_line_v'); s.once('animationcomplete', () => s.destroy()); };
+      const lineH = (r) => { const y = this.xy(r, 0).y; const s = this.add.sprite(bw / 2, y, 'fx_line_h').setDisplaySize(bw + 120, 130); this.fxLayer.add(s); s.play('fx_line_h'); s.once('animationcomplete', () => s.destroy()); this.torpedo(at.x, y, true, bw); };
+      const lineV = (c) => { const x = this.xy(0, c).x; const s = this.add.sprite(x, bh / 2, 'fx_line_v').setDisplaySize(130, bh + 120); this.fxLayer.add(s); s.play('fx_line_v'); s.once('animationcomplete', () => s.destroy()); this.torpedo(x, at.y, false, bh); };
+      const pan = f.at ? this.panOf(f.at[1]) : 0;
       switch (f.fx) {
-        case 'lineH': audio.play('sfx_line'); lineH(f.at[0]); break;
-        case 'lineV': audio.play('sfx_line'); lineV(f.at[1]); break;
+        case 'lineH': audio.play('sfx_line', { pan }); audio.buzz(25); lineH(f.at[0]); break;
+        case 'lineV': audio.play('sfx_line', { pan }); audio.buzz(25); lineV(f.at[1]); break;
         case 'bomb': await this.boom(f, at, st.hits, 1); centers.push(f.at); big = true; break;
-        case 'cross': audio.play('sfx_combo_special'); lineH(f.at[0]); lineV(f.at[1]); big = true; break;
-        case 'bigCross': audio.play('sfx_combo_special'); for (let d = -1; d <= 1; d++) { lineH(f.at[0] + d); lineV(f.at[1] + d); } big = true; break;
+        case 'cross': audio.play('sfx_combo_special', { pan }); audio.buzz(50); lineH(f.at[0]); lineV(f.at[1]); big = true; break;
+        case 'bigCross': audio.play('sfx_combo_special', { pan }); audio.buzz(70); for (let d = -1; d <= 1; d++) { lineH(f.at[0] + d); lineV(f.at[1] + d); } big = true; break;
         case 'bigBomb': audio.play('sfx_combo_special'); await this.boom(f, at, st.hits, 2); centers.push(f.at); big = true; break;
         case 'rainbowAll': {
           // 진주 + 진주: 큰 진주 폭발 → 빛줄기가 모든 칸으로 → 중심에서 물결처럼 차례로 터짐 (아래 handleHits)
-          audio.play('sfx_rainbow'); audio.play('sfx_combo_special');
+          audio.play('sfx_rainbow'); audio.play('sfx_combo_special'); audio.buzz([60, 40, 140]);
           this.fx('fx_rainbow_orb', at.x, at.y, { scale: 3.4 });
           this.cameras.main.flash(350, 255, 255, 255);
           const ring = this.add.circle(at.x, at.y, 40, 0xffffff, 0).setStrokeStyle(18, 0xFFF6B0, 1);
@@ -618,7 +629,7 @@ export class GameScene extends Phaser.Scene {
           break;
         }
         case 'rainbow': {
-          audio.play('sfx_rainbow');
+          audio.play('sfx_rainbow', { pan }); audio.buzz(35);
           this.fx('fx_rainbow_orb', at.x, at.y, { scale: 1.4 });
           const targets = (f.cells || []).slice(0, 40);
           for (const [r, c] of targets) {
@@ -664,7 +675,8 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: glow, alpha: 1, scale: 1.1, duration: 110 / this.speed, onComplete: () => this.tweens.add({ targets: glow, alpha: 0, duration: 200, onComplete: () => glow.destroy() }) });
       await tweenP(this, { targets: s, scale: s.scale * 1.45, duration: 110 / this.speed, ease: 'Quad.Out' });
     }
-    audio.play('sfx_bomb');
+    audio.play('sfx_bomb', { pan: this.panOf(f.at[1]) });
+    audio.buzz(rad === 1 ? 45 : 80);
     const size = (rad * 2 + 1) * CELL;
     const area = this.add.rectangle(at.x, at.y, size, size, 0xFFF1A8, 0.75).setStrokeStyle(10, 0xFF7A1A, 1);
     this.fxLayer.add(area);
@@ -718,7 +730,7 @@ export class GameScene extends Phaser.Scene {
       if (h.removed) {
         const s = this.sprites.get(h.removed);
         this.sprites.delete(h.removed);
-        if (h.kind === 'tile') this.fx('fx_pop', x, y, { tint: h.color >= 0 ? COLOR_HEX[h.color] : 0xffffff });
+        if (h.kind === 'tile') this.popTile(x, y, h.color);
         else if (h.kind === 'stone' || h.kind === 'crate') { stone = true; this.fx('fx_stone_crack', x, y, { scale: 1.2 }); }
         else if (h.kind === 'slime') { this.fx('fx_jelly_break', x, y, { tint: 0x4E5E1E }); jelly = true; }
         else if (h.kind === 'timer') { this.fx('fx_bomb', x, y, { scale: 0.9 }); }
@@ -766,6 +778,54 @@ export class GameScene extends Phaser.Scene {
   land(s) { this.tweens.add({ targets: s, scaleY: 0.9, scaleX: 1.06, yoyo: true, duration: 70 }); }
 
   // ═══ 이펙트 도우미 ═════════════════════════════════════════
+  panOf(col) { return Phaser.Math.Clamp(((col + 0.5) / this.engine.s.w) * 2 - 1, -1, 1) * 0.7; }
+
+  // 히트스톱: 진행 중인 트윈·애니메이션을 실제 시간으로 잠깐 멈춤
+  hitStop(ms) {
+    if (this.speed > 1.5) return Promise.resolve();      // 보너스 빨리 감기 중에는 생략
+    this.tweens.pauseAll(); this.anims.pauseAll();
+    return new Promise(res => setTimeout(() => { this.tweens.resumeAll(); this.anims.resumeAll(); res(); }, ms));
+  }
+
+  // 바다 생물별로 다른 파편이 튀고, 색 고리가 퍼짐 (파티클 수는 상한을 둬서 폰에서도 부드럽게)
+  popTile(x, y, color) {
+    const tint = color >= 0 ? COLOR_HEX[color] : 0xffffff;
+    this.fx('fx_pop', x, y, { tint });
+    const ring = this.add.image(x, y, 'ptc_ring').setScale(0.15).setTint(tint).setAlpha(0.9);
+    this.fxLayer.add(ring);
+    this.tweens.add({ targets: ring, scale: 0.55, alpha: 0, duration: 260, ease: 'Quad.Out', onComplete: () => ring.destroy() });
+    const key = ['ptc_crab', 'ptc_scale', 'ptc_spike', 'ptc_hex', 'ptc_drop', 'ptc_ink'][color] || 'ptc_bubble';
+    this.ptcLive = this.ptcLive || 0;
+    const n = this.ptcLive > 150 ? 1 : this.ptcLive > 90 ? 3 : 5;
+    for (let i = 0; i < n; i++) {
+      const p = this.add.image(x, y, i === n - 1 && n > 2 ? 'ptc_bubble' : key).setScale(0.45 + Math.random() * 0.35).setAngle(Math.random() * 360);
+      this.fxLayer.add(p); this.ptcLive++;
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, d = 70 + Math.random() * 90;
+      const tx = x + Math.cos(a) * d, peak = y + Math.sin(a) * d;
+      this.tweens.add({ targets: p, x: tx + Math.cos(a) * 20, angle: p.angle + (Math.random() < 0.5 ? -240 : 240), duration: 520 });
+      this.tweens.add({ targets: p, y: peak, duration: 200, ease: 'Quad.Out',
+        onComplete: () => this.tweens.add({ targets: p, y: peak + 90, alpha: 0, scale: p.scale * 0.6, duration: 320, ease: 'Quad.In', onComplete: () => { p.destroy(); this.ptcLive--; } }) });
+    }
+  }
+
+  // 줄 특수: 물줄기 어뢰가 양쪽 끝으로 달리며 물방울 자국을 남김
+  torpedo(x, y, horizontal, len) {
+    for (const dir of [-1, 1]) {
+      const head = this.add.image(x, y, 'ptc_glow').setScale(0.55).setTint(0xBFF4FF);
+      this.fxLayer.add(head);
+      const end = horizontal ? { x: dir < 0 ? -40 : len + 40 } : { y: dir < 0 ? -40 : len + 40 };
+      let last = 0;
+      this.tweens.add({ targets: head, ...end, duration: 260, ease: 'Quad.In',
+        onUpdate: () => {
+          const now = this.time.now; if (now - last < 28) return; last = now;
+          const b = this.add.image(head.x, head.y, 'ptc_bubble').setScale(0.18 + Math.random() * 0.2).setAlpha(0.9);
+          this.fxLayer.add(b);
+          this.tweens.add({ targets: b, y: b.y - 30 - Math.random() * 30, x: b.x + (Math.random() - 0.5) * 30, alpha: 0, duration: 450, onComplete: () => b.destroy() });
+        },
+        onComplete: () => head.destroy() });
+    }
+  }
+
   fx(key, x, y, { scale = 1, tint = null, angle = 0 } = {}) {
     const s = this.add.sprite(x, y, key).setScale(scale).setAngle(angle);
     if (tint !== null) s.setTint(tint);
@@ -827,6 +887,8 @@ export class GameScene extends Phaser.Scene {
     this.syncAll();
     const s = this.engine.s;
     this.updateHUD({ score: s.score, moves: s.moves, goals: s.goals.map(g => g.progress) });
+    // 남은 이동이 5수 이하면 긴장 레이어(빠른 셰이커·펄스)가 점점 커짐
+    audio.intensity(s.status === 'play' && s.moves <= 5 ? Math.min(1, 0.45 + (5 - s.moves) * 0.15) : 0);
     if (s.status === 'win') return this.winSequence();
     if (s.status === 'lose') return this.loseSequence();
     if (this.pendingPause) { this.pendingPause = false; this.busy = false; this.pausePopup(); return; }
@@ -879,9 +941,16 @@ export class GameScene extends Phaser.Scene {
     const GIFTS = ['hammer', 'shuffle', 'swap', 'moves'];
     const gift = firstClear && this.levelId % 5 === 0 ? GIFTS[(this.levelId / 5 - 1) % GIFTS.length] : null;
     if (gift) addBooster(gift, 1);
+    // 보스(10번째) 레벨을 처음 깨면 다음 화면 전환 때 월드 클리어 연출
+    if (firstClear && this.levelId % 10 === 0) this.worldCleared = this.level.world;
 
     const p = popup(this, { title: t('levelClear'), width: 900, height: 1180, closeButton: false });
     const B = p.box;
+    // 별 뒤에서 도는 빛줄기
+    const rays = this.add.image(0, -380, 'ptc_rays').setScale(1.7).setAlpha(0).setTint(0xFFF1A8);
+    B.add(rays);
+    this.tweens.add({ targets: rays, alpha: 0.6, duration: 500, delay: 300 });
+    this.tweens.add({ targets: rays, angle: 360, duration: 9000, repeat: -1 });
     // ① 별 자리 (빈 별) — 점수가 기준을 넘는 순간 하나씩 채워진다
     const slots = [0, 1, 2].map(i => {
       const x = (i - 1) * 220, y = -360 + (i === 1 ? -30 : 0), size = i === 1 ? 210 : 180;
@@ -907,12 +976,19 @@ export class GameScene extends Phaser.Scene {
     const popStar = i => {
       const sl = slots[i];
       const st = this.add.image(sl.x, sl.y, 'star_big_on').setDisplaySize(sl.size, sl.size);
-      const target = st.scale; st.setScale(0);
+      const target = st.scale; st.setScale(target * 2.6).setAlpha(0).setAngle(-25);
       B.add(st);
-      this.tweens.add({ targets: st, scale: target, duration: 380, ease: 'Back.Out' });
       marks[i].setVisible(true);
       audio.play(`sfx_star_${i + 1}`);
       const w = { x: W / 2 + sl.x, y: H / 2 + sl.y };
+      // 하늘에서 쾅 박히는 별: 박히는 순간 흔들림·충격파·진동
+      this.tweens.add({ targets: st, scale: target, alpha: 1, angle: 0, duration: 240, ease: 'Quad.In', onComplete: () => {
+        audio.play('sfx_star_slam'); audio.buzz(30 + i * 15);
+        this.cameras.main.shake(140 + i * 40, 0.005 + i * 0.003);
+        const ring = this.add.image(w.x, w.y, 'ptc_ring').setScale(0.3).setTint(0xFFE14D).setDepth(1001);
+        this.tweens.add({ targets: ring, scale: 1.6 + i * 0.3, alpha: 0, duration: 450, onComplete: () => ring.destroy() });
+        this.tweens.add({ targets: st, scale: target * 1.12, yoyo: true, duration: 90 });
+      } });
       for (let k = 0; k < 10; k++) {
         const pt = this.add.image(w.x, w.y, k % 2 ? 'ptc_star' : 'ptc_spark').setScale(0.35).setTint(0xFFD23F).setDepth(1001);
         const a = (k / 10) * Math.PI * 2;
@@ -1034,12 +1110,23 @@ export class GameScene extends Phaser.Scene {
 
   failPopup(reason) {
     audio.play('jingle_lose');
-    const p = popup(this, { title: t('failed'), width: 900, height: 1040, closeButton: false });
-    p.box.add(this.add.image(0, -230, 'popup_deco_fail').setScale(0.55));
-    p.box.add(this.add.text(0, -40, reason, TXT.body).setOrigin(0.5));
-    this.goalSummary(p.box, 40);
-    p.box.add(button(this, 0, 270, t('retry'), () => this.restart(), { width: 520, height: 160, size: 60 }));
-    p.box.add(button(this, 0, 405, t('map'), () => this.toMap(), { kind: 'secondary', width: 380, height: 120, size: 42 }));
+    const s = this.engine.s;
+    const p = popup(this, { title: t('failed'), width: 900, height: 1120, closeButton: false });
+    const B = p.box;
+    B.add(this.add.image(0, -360, 'popup_deco_fail').setScale(0.45));
+    B.add(this.add.text(0, -225, reason, TXT.body).setOrigin(0.5));
+    B.add(this.add.text(0, -160, t('leftGoals'), { ...TXT.dark, fontSize: '32px' }).setOrigin(0.5));
+    this.goalSummary(B, -120);
+    // 아깝게 졌으면(남은 목표가 조금) 응원 문구, 아니면 TIP
+    const near = s.goals.every(g => { const left = Math.max(0, g.target - g.progress); return left <= 3 || left / Math.max(1, g.target) <= 0.2; });
+    const msg = this.add.text(0, 130, near ? t('almost') : pickTip(), near ? { ...TXT.mid, fontSize: '44px', color: '#FFE14D', stroke: '#C2410C', strokeThickness: 10 }
+      : { ...TXT.body, fontSize: '28px', wordWrap: { width: 720, useAdvancedWrap: true } }).setOrigin(0.5);
+    B.add(msg);
+    if (near) this.tweens.add({ targets: msg, scale: 1.08, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.InOut' });
+    const retry = button(this, 0, 300, t('retry'), () => this.restart(), { width: 520, height: 160, size: 60 });
+    B.add(retry);
+    this.tweens.add({ targets: retry, scale: 1.05, yoyo: true, repeat: -1, duration: 600, delay: 800, ease: 'Sine.InOut' });
+    B.add(button(this, 0, 445, t('map'), () => this.toMap(), { kind: 'secondary', width: 380, height: 120, size: 42 }));
   }
 
   pausePopup() {
@@ -1063,19 +1150,41 @@ export class GameScene extends Phaser.Scene {
 
   levelStartPopup() {
     const lv = this.level;
-    const p = popup(this, { title: `${t('level')} ${lv.id}`, width: 900, height: 900, closeButton: false });
-    p.box.add(this.add.text(0, -250, t('goal'), TXT.dark).setOrigin(0.5));
     const s = this.engine.s;
+    const p = popup(this, { title: `${t('level')} ${lv.id}`, width: 900, height: 1080, closeButton: false });
+    const B = p.box;
+    // 월드 이름 (+ 보스 경고)
+    B.add(this.add.text(0, -405, `${lv.world}. ${t('worldName')[lv.world - 1]}`, { ...TXT.small, fontSize: '32px', stroke: '#0B3E8A' }).setOrigin(0.5));
+    if (lv.boss) {
+      const badge = this.add.text(330, -500, 'BOSS', { ...TXT.big, fontSize: '58px', color: '#FFE14D', stroke: '#8A1E00', strokeThickness: 14 }).setOrigin(0.5).setAngle(14);
+      B.add(badge);
+      this.tweens.add({ targets: badge, scale: 1.15, angle: 8, yoyo: true, repeat: -1, duration: 420, ease: 'Sine.InOut' });
+      B.add(this.add.text(0, -350, t('bossWarn'), { ...TXT.small, fontSize: '30px', color: '#FF5A3A', stroke: '#FFFFFF', strokeThickness: 6 }).setOrigin(0.5));
+      this.cameras.main.shake(200, 0.004);
+    }
+    B.add(this.add.text(0, -285, t('goal'), TXT.dark).setOrigin(0.5));
+    // 목표 카드가 하나씩 튀어나옴
     s.goals.forEach((g, i) => {
       const x = (i - (s.goals.length - 1) / 2) * 200;
-      p.box.add(this.add.nineslice(x, -120, 'hud_goal_box', null, 170, 190, 40, 40, 40, 40));
-      p.box.add(this.add.image(x, -142, this.goalIcon(g)).setScale(g.type === 'score' ? 1.5 : g.type === 'jelly' ? 0.78 : 0.7));
-      const txt = g.type === 'score' ? g.target.toLocaleString('en-US') : `${g.target}`;
-      p.box.add(this.add.text(x, -68, txt, { ...TXT.small, fontSize: '40px' }).setOrigin(0.5));
+      const card = this.add.container(x, -160);
+      card.add(this.add.nineslice(0, 0, 'hud_goal_box', null, 170, 190, 40, 40, 40, 40));
+      card.add(this.add.image(0, -22, this.goalIcon(g)).setScale(g.type === 'score' ? 1.5 : g.type === 'jelly' ? 0.78 : 0.7));
+      card.add(this.add.text(0, 52, g.type === 'score' ? g.target.toLocaleString('en-US') : `${g.target}`, { ...TXT.small, fontSize: '40px' }).setOrigin(0.5));
+      card.setScale(0);
+      B.add(card);
+      this.tweens.add({ targets: card, scale: 1, delay: 250 + i * 140, duration: 320, ease: 'Back.Out', onStart: () => audio.play('sfx_select') });
     });
-    p.box.add(this.add.text(0, 70, `${t('moves')}  ${s.moves}`, TXT.dark).setOrigin(0.5));
-    p.box.add(starsRow(this, 0, 175, load().stars[lv.id] || 0, { size: 80, gap: 96, key: 'small' }));
-    p.box.add(button(this, 0, 320, t('start'), () => { p.close(); this.startPlay(); }, { width: 520, height: 160, size: 60 }));
+    B.add(this.add.text(0, -20, `${t('moves')}  ${s.moves}`, TXT.dark).setOrigin(0.5));
+    B.add(starsRow(this, 0, 80, load().stars[lv.id] || 0, { size: 76, gap: 92, key: 'small' }));
+    // TIP 말풍선 + 몽이
+    B.add(this.add.nineslice(30, 225, 'hud_goal_box', null, 760, 150, 40, 40, 40, 40));
+    const m = this.add.image(-345, 230, 'mascot_talk').setScale(0.16);
+    B.add(m);
+    this.tweens.add({ targets: m, y: m.y - 8, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.InOut' });
+    B.add(this.add.text(50, 225, pickTip(), { ...TXT.body, fontSize: '28px', align: 'left', wordWrap: { width: 600, useAdvancedWrap: true }, lineSpacing: 6 }).setOrigin(0.5));
+    const go = button(this, 0, 400, t('start'), () => { p.close(); this.startPlay(); }, { width: 520, height: 160, size: 60 });
+    B.add(go);
+    this.tweens.add({ targets: go, scale: 1.05, yoyo: true, repeat: -1, duration: 600, delay: 900, ease: 'Sine.InOut' });
   }
 
   startPlay() {
@@ -1112,8 +1221,12 @@ export class GameScene extends Phaser.Scene {
 
   // ═══ 화면 이동 ═════════════════════════════════════════════
   restart() { this.scene.restart({ levelId: this.levelId }); }
-  toMap() { this.scene.start('Map', { celebrate: true }); }
+  toMap() {
+    if (this.worldCleared) return this.scene.start('WorldClear', { world: this.worldCleared });
+    this.scene.start('Map', { celebrate: true });
+  }
   goNext() {
+    if (this.worldCleared) return this.toMap();
     if (this.levelId < LEVELS.length) this.scene.restart({ levelId: this.levelId + 1 });
     else this.toMap();
   }
