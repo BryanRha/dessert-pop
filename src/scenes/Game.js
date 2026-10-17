@@ -495,6 +495,7 @@ export class GameScene extends Phaser.Scene {
         audio.play('sfx_item_drop');
         await Promise.all(st.items.map(it => {
           const s = this.sprites.get(it.id); if (!s) return null;
+          track('rescue', 1, (s.piece && s.piece.v) || 'a');
           this.sprites.delete(it.id);
           this.sparkles(s.x, s.y, 0xFFD23F, 8);
           return tweenP(this, { targets: s, y: s.y + 90, alpha: 0, scale: 1.3, duration: 380 / sp, onDone: () => s.destroy() });
@@ -577,6 +578,7 @@ export class GameScene extends Phaser.Scene {
     if (st.level >= 3) { this.cameras.main.shake(140 + st.level * 30, 0.002 * Math.min(st.level, 6)); audio.buzz(12 + st.level * 4); }
     if (st.level >= 5) this.cameras.main.flash(120, 255, 255, 255, false);
     if (st.level >= 4) track('combo');
+    track('comboLevel', st.level);
     for (const c of st.created) {
       track('make');
       this.setPieceTexture(c.id, { sp: c.sp });
@@ -612,7 +614,7 @@ export class GameScene extends Phaser.Scene {
         case 'bomb': track('bomb'); await this.boom(f, at, st.hits, 1); centers.push(f.at); big = true; break;
         case 'cross': audio.play('sfx_combo_special', { pan }); audio.buzz(50); lineH(f.at[0]); lineV(f.at[1]); big = true; break;
         case 'bigCross': audio.play('sfx_combo_special', { pan }); audio.buzz(70); for (let d = -1; d <= 1; d++) { lineH(f.at[0] + d); lineV(f.at[1] + d); } big = true; break;
-        case 'bigBomb': audio.play('sfx_combo_special'); await this.boom(f, at, st.hits, 2); centers.push(f.at); big = true; break;
+        case 'bigBomb': track('bomb'); audio.play('sfx_combo_special'); await this.boom(f, at, st.hits, 2); centers.push(f.at); big = true; break;
         case 'rainbowAll': {
           // 진주 + 진주: 큰 진주 폭발 → 빛줄기가 모든 칸으로 → 중심에서 물결처럼 차례로 터짐 (아래 handleHits)
           audio.play('sfx_rainbow'); audio.play('sfx_combo_special'); audio.buzz([60, 40, 140]);
@@ -630,7 +632,7 @@ export class GameScene extends Phaser.Scene {
             this.fxLayer.add(beam);
             this.tweens.add({ targets: beam, alpha: 0, duration: 480, delay: 160, onComplete: () => beam.destroy() });
           });
-          this.pearlStorm();
+          this.pearlStorm(); track('pearl');
           ripple = true; centers.push(f.at);
           big = true;
           await wait(this, 380 / this.speed);
@@ -729,16 +731,24 @@ export class GameScene extends Phaser.Scene {
     this.sparkles(at.x, at.y, 0xFFD23F, 8);
   }
 
-  // 미션 완료 알림 (화면 위쪽에서 내려왔다 올라감)
+  // 미션 완료 · 도감 등급 업 · 업적 달성 알림 (화면 위쪽에서 내려왔다 올라감, 여러 개면 차례로)
   missionToast(def) {
-    audio.play('sfx_star_2');
-    const c = this.add.container(W / 2, -80).setDepth(950);
-    c.add(this.add.nineslice(0, 0, 'hud_goal_box', null, 700, 120, 40, 40, 40, 40));
-    c.add(this.add.image(-290, 0, 'ico_mission').setScale(0.4));
-    c.add(this.add.text(-230, -22, t('missionDone'), { ...TXT.small, fontSize: '30px', color: '#FF6A1F', stroke: '#FFFFFF', strokeThickness: 6 }).setOrigin(0, 0.5));
-    c.add(this.add.text(-230, 22, t(`missionText.${def.id}`), { ...TXT.dark, fontSize: '30px' }).setOrigin(0, 0.5));
-    this.tweens.add({ targets: c, y: 330, duration: 380, ease: 'Back.Out',
-      onComplete: () => this.tweens.add({ targets: c, y: -100, delay: 1800, duration: 300, ease: 'Back.In', onComplete: () => c.destroy() }) });
+    const head = { mission: t('missionDone'), dex: t('dexNew'), ach: t('achDone') }[def.kind] || t('missionDone');
+    const body = def.kind === 'dex' ? `${t(`dexNames.${def.id}`)} · ${t('dexTier')[def.lv - 1]}` : def.kind === 'ach' ? t(`achText.${def.id}`) : t(`missionText.${def.id}`);
+    const icon = def.kind === 'dex' ? def.key : def.kind === 'ach' ? 'ico_trophy' : 'ico_mission';
+    const delay = Math.max(0, (this.toastUntil || 0) - this.time.now);
+    this.toastUntil = this.time.now + delay + 2500;
+    this.time.delayedCall(delay, () => {
+      audio.play('sfx_star_2');
+      const c = this.add.container(W / 2, -80).setDepth(950);
+      c.add(this.add.nineslice(0, 0, 'hud_goal_box', null, 700, 120, 40, 40, 40, 40));
+      const ic = this.add.image(-290, 0, icon); ic.setScale(Math.min(80 / ic.width, 80 / ic.height));
+      c.add(ic);
+      c.add(this.add.text(-230, -22, head, { ...TXT.small, fontSize: '30px', color: '#FF6A1F', stroke: '#FFFFFF', strokeThickness: 6 }).setOrigin(0, 0.5));
+      c.add(this.add.text(-230, 22, body, { ...TXT.dark, fontSize: '30px' }).setOrigin(0, 0.5));
+      this.tweens.add({ targets: c, y: 330, duration: 380, ease: 'Back.Out',
+        onComplete: () => this.tweens.add({ targets: c, y: -100, delay: 1700, duration: 300, ease: 'Back.In', onComplete: () => c.destroy() }) });
+    });
   }
 
   // 진주 대폭발 문구 (다른 콤보 문구와 같은 영문 이미지)
@@ -788,7 +798,7 @@ export class GameScene extends Phaser.Scene {
         else if (h.kind === 'stone' || h.kind === 'crate') { stone = true; this.fx('fx_stone_crack', x, y, { scale: 1.2 }); }
         else if (h.kind === 'slime') { this.fx('fx_jelly_break', x, y, { tint: 0x4E5E1E }); jelly = true; }
         else if (h.kind === 'timer') { this.fx('fx_bomb', x, y, { scale: 0.9 }); }
-        else if (h.kind === 'star') { audio.play('sfx_coin'); this.sparkles(x, y, 0xFFD23F, 10); }
+        else if (h.kind === 'star') { track('star'); audio.play('sfx_coin'); this.sparkles(x, y, 0xFFD23F, 10); }
         if (s) {
           if (h.kind === 'star' || (h.kind === 'tile' && this.isCollectGoal(h.color))) this.flyToGoal(s);
           else this.tweens.add({ targets: s, scale: 1.25, alpha: 0, duration: 180, ease: 'Quad.Out', onComplete: () => s.destroy() });
@@ -992,7 +1002,7 @@ export class GameScene extends Phaser.Scene {
     const coins = 20 + stars * 10 + (this.level.boss ? 30 : 0) + (first3 ? 30 : 0);
     recordWin(this.levelId, stars, score, LEVELS.length + 1);
     const streakNow = addStreak();
-    track('win'); track('stars', stars); flush();
+    track('win'); track('stars', stars); track('streak', streakNow); flush();
     addCoins(coins);
     // 진행 보상: 5레벨마다 처음 클리어하면 부스터 선물 (막혔을 때의 구제책이 아니라 진행에 대한 보상)
     const GIFTS = ['hammer', 'shuffle', 'swap', 'moves'];

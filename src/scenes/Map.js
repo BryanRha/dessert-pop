@@ -6,6 +6,8 @@ import { load, save, availableStars } from '../save.js';
 import { RESTORE_TASKS, taskCost } from '../restore.js';
 import { dailyPopup, missionPopup } from '../ui/meta.js';
 import { dailyState, claimableCount } from '../missions.js';
+import { dexPopup, achPopup } from '../ui/collection.js';
+import { dexClaimable, achClaimable } from '../progress.js';
 import { LEVELS } from '../core/levels.js';
 import { popup, button, iconButton, toast, enableGlow } from '../ui/widgets.js';
 
@@ -149,6 +151,18 @@ export class MapScene extends Phaser.Scene {
     this.misBadgeTxt = this.add.text(175, H - 247, '', { ...TXT.small, fontSize: '28px', strokeThickness: 0 }).setOrigin(0.5).setScrollFactor(0).setDepth(32);
     this.misBtn = mis;
     this.refreshMissionBadge();
+    // 도감 · 업적 (미션 위에 차례로)
+    this.sideBadges = [];
+    const side = (y, icon, label, open, countFn) => {
+      const btn = iconButton(this, 120, y, icon, () => open(this, () => this.refreshSideBadges()), { size: 140 }).setScrollFactor(0).setDepth(30);
+      this.add.text(120, y + 90, label, { ...TXT.small, fontSize: '26px', strokeThickness: 7 }).setOrigin(0.5).setScrollFactor(0).setDepth(30);
+      const dot = this.add.circle(170, y - 50, 22, 0xFF3B4A).setStrokeStyle(5, 0xffffff).setScrollFactor(0).setDepth(31);
+      const txt = this.add.text(170, y - 52, '', { ...TXT.small, fontSize: '26px', strokeThickness: 0 }).setOrigin(0.5).setScrollFactor(0).setDepth(32);
+      this.sideBadges.push({ dot, txt, countFn });
+    };
+    side(H - 400, 'ico_book', t('dexBtn'), dexPopup, dexClaimable);
+    side(H - 600, 'ico_trophy', t('achBtn'), achPopup, achClaimable);
+    this.refreshSideBadges();
     // 오늘 첫 방문이면 출석 보상 (새 월드로 이동하는 연출이 끝난 뒤)
     if (dailyState().canClaim) this.time.delayedCall(data.arrive ? 3600 : 650, () => dailyPopup(this));
     if (canDo) {
@@ -209,6 +223,10 @@ export class MapScene extends Phaser.Scene {
     }
     g.y0 = y0;
     return g;
+  }
+
+  refreshSideBadges() {
+    for (const b of this.sideBadges || []) { const n = b.countFn(); b.dot.setVisible(n > 0); b.txt.setVisible(n > 0).setText(`${n}`); }
   }
 
   refreshMissionBadge() {

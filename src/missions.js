@@ -1,6 +1,7 @@
 // 출석 보상(7일 주기) + 일일 미션(매일 3개). 진행은 save.js 의 같은 저장소에 함께 저장한다.
 // 보상은 모두 정해진 내용이고 미리 보여 준다 (무작위 뽑기 없음).
 import { load, save, addCoins, addBooster } from './save.js';
+import { count, newlyReached } from './progress.js';
 
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -85,6 +86,8 @@ export function onMissionDone(fn) { listeners.push(fn); return () => listeners.s
 
 // 사건 기록 (게임 중에는 메모리에만 쌓고 flush() 때 저장)
 export function track(ev, n = 1, arg = null) {
+  count(ev, n, arg);           // 누적 기록 (도감·업적)
+  dirty = true;
   const d = load();
   if (!d.missions || d.missions.date !== today()) missions();
   for (const m of d.missions.list) {
@@ -92,10 +95,17 @@ export function track(ev, n = 1, arg = null) {
     if (!def || def.ev !== ev || (def.arg != null && def.arg !== arg) || m.progress >= def.target) continue;
     m.progress = Math.min(def.target, m.progress + n);
     dirty = true;
-    if (m.progress >= def.target) listeners.forEach(fn => fn(def));
+    if (m.progress >= def.target) listeners.forEach(fn => fn({ kind: 'mission', ...def }));
   }
 }
-export function flush() { if (dirty) { save(); dirty = false; } }
+export function flush() {
+  if (!dirty) return;
+  const d = load();
+  // 처음 한 번은 이미 이룬 것들을 조용히 기록 (기존 플레이어에게 알림이 쏟아지지 않게)
+  if (!d.progressInit) { newlyReached(); d.progressInit = true; }
+  else for (const r of newlyReached()) listeners.forEach(fn => fn({ kind: r.type, ...r }));
+  save(); dirty = false;
+}
 
 export function claimMission(id) {
   const d = load();
@@ -106,5 +116,5 @@ export function claimMission(id) {
   return true;
 }
 export function canClaimBonus() { const d = load(); return d.missions && !d.missions.bonus && d.missions.list.every(m => m.claimed); }
-export function claimBonus() { if (!canClaimBonus()) return false; load().missions.bonus = true; giveReward(ALL_BONUS); save(); return true; }
+export function claimBonus() { if (!canClaimBonus()) return false; load().missions.bonus = true; giveReward(ALL_BONUS); track('missionBonus'); flush(); return true; }
 export function claimableCount() { return missions().filter(m => !m.claimed && m.progress >= m.target).length + (canClaimBonus() ? 1 : 0); }
