@@ -5,7 +5,7 @@ import { LEVELS } from '../core/levels.js';
 import { t } from '../i18n.js';
 import { audio, WORLD_BGM } from '../audio.js';
 import { pickTip } from '../tips.js';
-import { load, save, recordWin, addCoins, addBooster, spendCoins, useBooster } from '../save.js';
+import { load, save, addStreak, breakStreak, recordWin, addCoins, addBooster, spendCoins, useBooster } from '../save.js';
 import { button, iconButton, popup, toast, starsRow, enableGlow } from '../ui/widgets.js';
 
 const BOARD_TOP = 436;
@@ -971,6 +971,7 @@ export class GameScene extends Phaser.Scene {
     const first3 = stars === 3 && prevStars < 3;
     const coins = 20 + stars * 10 + (this.level.boss ? 30 : 0) + (first3 ? 30 : 0);
     recordWin(this.levelId, stars, score, LEVELS.length + 1);
+    const streakNow = addStreak();
     addCoins(coins);
     // 진행 보상: 5레벨마다 처음 클리어하면 부스터 선물 (막혔을 때의 구제책이 아니라 진행에 대한 보상)
     const GIFTS = ['hammer', 'shuffle', 'swap', 'moves'];
@@ -1085,6 +1086,11 @@ export class GameScene extends Phaser.Scene {
     B.add(button(this, 0, 400, hasNext ? t('next') : t('map'), () => this.goNext(), { width: 500, height: 160, size: 60 }));
     B.add(iconButton(this, -330, 400, 'ico_retry', () => this.restart(), { size: 130 }));
     B.add(iconButton(this, 330, 400, 'ico_map', () => this.toMap(), { size: 130 }));
+    if (streakNow >= 2) {
+      const chip = this.add.text(-300, -500, t('streakNow', streakNow), { ...TXT.small, fontSize: '30px', color: '#FFE14D', stroke: '#C2410C', strokeThickness: 8 }).setOrigin(0.5).setAngle(-8);
+      B.add(chip);
+      this.tweens.add({ targets: chip, scale: 1.1, yoyo: true, repeat: -1, duration: 450 });
+    }
     const m = this.add.image(370, -420, stars === 3 ? 'mascot_happy' : 'mascot_idle').setScale(0.17);
     B.add(m);
     this.tweens.add({ targets: m, y: m.y - 14, yoyo: true, repeat: -1, duration: stars === 3 ? 300 : 700 });
@@ -1146,7 +1152,8 @@ export class GameScene extends Phaser.Scene {
   failPopup(reason) {
     audio.play('jingle_lose');
     const s = this.engine.s;
-    const p = popup(this, { title: t('failed'), width: 900, height: 1120, closeButton: false });
+    const lostStreak = breakStreak();
+    const p = popup(this, { title: t('failed'), width: 900, height: 1160, closeButton: false });
     const B = p.box;
     B.add(this.add.image(0, -360, 'popup_deco_fail').setScale(0.45));
     B.add(this.add.text(0, -225, reason, TXT.body).setOrigin(0.5));
@@ -1158,10 +1165,11 @@ export class GameScene extends Phaser.Scene {
       : { ...TXT.body, fontSize: '28px', wordWrap: { width: 720, useAdvancedWrap: true } }).setOrigin(0.5);
     B.add(msg);
     if (near) this.tweens.add({ targets: msg, scale: 1.08, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.InOut' });
-    const retry = button(this, 0, 300, t('retry'), () => this.restart(), { width: 520, height: 160, size: 60 });
+    if (lostStreak) B.add(this.add.text(0, 215, t('streakLost'), { ...TXT.small, fontSize: '28px', color: '#FFB0B0', stroke: '#7A1020', strokeThickness: 7 }).setOrigin(0.5));
+    const retry = button(this, 0, 320, t('retry'), () => this.restart(), { width: 520, height: 160, size: 60 });
     B.add(retry);
     this.tweens.add({ targets: retry, scale: 1.05, yoyo: true, repeat: -1, duration: 600, delay: 800, ease: 'Sine.InOut' });
-    B.add(button(this, 0, 445, t('map'), () => this.toMap(), { kind: 'secondary', width: 380, height: 120, size: 42 }));
+    B.add(button(this, 0, 470, t('map'), () => this.toMap(), { kind: 'secondary', width: 380, height: 120, size: 42 }));
   }
 
   pausePopup() {
@@ -1179,14 +1187,15 @@ export class GameScene extends Phaser.Scene {
     row(-250, t('sound'), () => d.sfx, () => audio.toggleSfx(), 'ico_sound_on', 'ico_sound_off');
     row(-90, t('music'), () => d.music, () => audio.toggleMusic(), 'ico_music_on', 'ico_music_off');
     p.box.add(button(this, 0, 90, t('resume'), () => p.close(), { width: 520, height: 150, size: 56 }));
-    p.box.add(button(this, -150, 260, t('retry'), () => this.restart(), { kind: 'secondary', width: 280, height: 120, size: 40 }));
-    p.box.add(button(this, 150, 260, t('quit'), () => this.toMap(), { kind: 'secondary', width: 280, height: 120, size: 40 }));
+    const abandon = () => { if (this.engine.s.turn > 0) breakStreak(); };
+    p.box.add(button(this, -150, 260, t('retry'), () => { abandon(); this.restart(); }, { kind: 'secondary', width: 280, height: 120, size: 40 }));
+    p.box.add(button(this, 150, 260, t('quit'), () => { abandon(); this.toMap(); }, { kind: 'secondary', width: 280, height: 120, size: 40 }));
   }
 
   levelStartPopup() {
     const lv = this.level;
     const s = this.engine.s;
-    const p = popup(this, { title: `${t('level')} ${lv.id}`, width: 900, height: 1080, closeButton: false });
+    const p = popup(this, { title: `${t('level')} ${lv.id}`, width: 900, height: 1160, closeButton: false });
     const B = p.box;
     // 월드 이름 (+ 보스 경고)
     B.add(this.add.text(0, -405, `${lv.world}. ${t('worldName')[lv.world - 1]}`, { ...TXT.small, fontSize: '32px', stroke: '#0B3E8A' }).setOrigin(0.5));
@@ -1210,25 +1219,62 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: card, scale: 1, delay: 250 + i * 140, duration: 320, ease: 'Back.Out', onStart: () => audio.play('sfx_select') });
     });
     B.add(this.add.text(0, -20, `${t('moves')}  ${s.moves}`, TXT.dark).setOrigin(0.5));
-    B.add(starsRow(this, 0, 80, load().stars[lv.id] || 0, { size: 76, gap: 92, key: 'small' }));
+    B.add(starsRow(this, 0, 70, load().stars[lv.id] || 0, { size: 76, gap: 92, key: 'small' }));
+    // 연승 보너스: 연속 클리어 수만큼 특수 블록 칸이 채워짐
+    const streak = Math.min(3, load().streak || 0);
+    B.add(this.add.text(0, 150, streak ? t('streakOn', load().streak) : t('streakHint'), { ...TXT.small, fontSize: '28px', color: streak ? '#FFE14D' : '#FFFFFF', stroke: streak ? '#C2410C' : '#123A6E', strokeThickness: 7 }).setOrigin(0.5));
+    ['tile_red_lineH', 'tile_blue_bomb', 'tile_rainbow'].forEach((k, i) => {
+      const on = i < streak;
+      const ic = this.add.image((i - 1) * 130, 222, k).setScale(0.72).setAlpha(on ? 1 : 0.35);
+      if (!on) ic.setTint(0x8899AA);
+      B.add(ic);
+      if (on) this.tweens.add({ targets: ic, scale: 0.82, yoyo: true, repeat: -1, duration: 500, delay: i * 150, ease: 'Sine.InOut' });
+    });
     // TIP 말풍선 + 몽이
-    B.add(this.add.nineslice(30, 225, 'hud_goal_box', null, 760, 150, 40, 40, 40, 40));
-    const m = this.add.image(-345, 230, 'mascot_talk').setScale(0.16);
+    B.add(this.add.nineslice(30, 330, 'hud_goal_box', null, 760, 140, 40, 40, 40, 40));
+    const m = this.add.image(-345, 335, 'mascot_talk').setScale(0.16);
     B.add(m);
     this.tweens.add({ targets: m, y: m.y - 8, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.InOut' });
-    B.add(this.add.text(50, 225, pickTip(), { ...TXT.body, fontSize: '28px', align: 'left', wordWrap: { width: 600, useAdvancedWrap: true }, lineSpacing: 6 }).setOrigin(0.5));
-    const go = button(this, 0, 400, t('start'), () => { p.close(); this.startPlay(); }, { width: 520, height: 160, size: 60 });
+    B.add(this.add.text(50, 330, pickTip(), { ...TXT.body, fontSize: '28px', align: 'left', wordWrap: { width: 600, useAdvancedWrap: true }, lineSpacing: 6 }).setOrigin(0.5));
+    const go = button(this, 0, 475, t('start'), () => { p.close(); this.startPlay(); }, { width: 520, height: 160, size: 60 });
     B.add(go);
     this.tweens.add({ targets: go, scale: 1.05, yoyo: true, repeat: -1, duration: 600, delay: 900, ease: 'Sine.InOut' });
   }
 
-  startPlay() {
+  async startPlay() {
+    await this.applyStreakBonus();
     const tut = this.level.tutorial;
     const d = load();
     if (tut && !d.seenTut[tut.key]) {
       d.seenTut[tut.key] = true; save();
       this.tutorialBubble(t(`tut.${tut.key}`), () => { this.busy = false; if (tut.hand) this.showTutorialHand(); this.scheduleHint(); });
     } else { this.busy = false; this.scheduleHint(); }
+  }
+
+  // 연승 보너스: 보드의 평범한 블록 몇 개를 특수 블록으로 바꿔서 시작 (1연승 줄 · 2연승 +폭탄 · 3연승 +진주)
+  async applyStreakBonus() {
+    const n = Math.min(3, load().streak || 0);
+    if (!n) return;
+    const e = this.engine;
+    const cand = [];
+    e.each((cl, r, c) => { if (cl.p && cl.p.k === 'tile' && !cl.p.sp && !cl.cover) cand.push([r, c]); });
+    Phaser.Utils.Array.Shuffle(cand);
+    const kinds = [Math.random() < 0.5 ? 'lineH' : 'lineV', 'bomb', 'rainbow'].slice(0, n);
+    for (let i = 0; i < kinds.length && i < cand.length; i++) {
+      const [r, c] = cand[i];
+      const p = e.s.cells[r][c].p;
+      p.sp = kinds[i];
+      const s = this.sprites.get(p.id);
+      this.setPieceTexture(p.id, { sp: p.sp });
+      if (s) {
+        const sc = s.scale; s.setScale(0);
+        this.tweens.add({ targets: s, scale: sc, duration: 380, ease: 'Back.Out' });
+        this.fx('fx_special_create', s.x, s.y, { scale: 1.2 });
+        this.sparkles(s.x, s.y, 0xFFD23F, 8);
+      }
+      audio.play('sfx_special_create');
+      await wait(this, 260);
+    }
   }
 
   tutorialBubble(text, done) {

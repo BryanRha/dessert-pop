@@ -4,6 +4,9 @@ const DEFAULT = {
   unlocked: 1, stars: {}, best: {}, coins: 300,
   boosters: { hammer: 3, shuffle: 2, swap: 2, moves: 1 },
   sfx: true, music: true, seenTut: {},
+  streak: 0,            // 연승 (실패하거나 도중에 포기하면 0)
+  restore: {},          // 월드 → 완료한 바다 복원 과제 수
+  starsSpent: 0,        // 바다 복원에 쓴 별
 };
 
 let data = null;
@@ -35,3 +38,8 @@ export function spendCoins(n) { const d = load(); if (d.coins < n) return false;
 export function useBooster(k) { const d = load(); if ((d.boosters[k] || 0) <= 0) return false; d.boosters[k]--; save(); return true; }
 export function addBooster(k, n = 1) { const d = load(); d.boosters[k] = (d.boosters[k] || 0) + n; save(); }
 export function totalStars() { return Object.values(load().stars).reduce((a, b) => a + b, 0); }
+// 별은 '모은 총량'과 '쓸 수 있는 양'을 따로 본다 (바다 복원에 쓰면 쓸 수 있는 양만 줄어듦)
+export function availableStars() { return Math.max(0, totalStars() - (load().starsSpent || 0)); }
+export function spendStars(n) { const d = load(); if (availableStars() < n) return false; d.starsSpent = (d.starsSpent || 0) + n; save(); return true; }
+export function addStreak() { const d = load(); d.streak = (d.streak || 0) + 1; save(); return d.streak; }
+export function breakStreak() { const d = load(); const had = d.streak || 0; d.streak = 0; save(); return had; }

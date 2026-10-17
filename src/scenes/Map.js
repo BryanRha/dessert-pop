@@ -2,7 +2,8 @@
 import { W, H, TXT, INK, WORLD_COUNT, MAP_THEME } from '../config.js';
 import { t } from '../i18n.js';
 import { audio } from '../audio.js';
-import { load, save, totalStars } from '../save.js';
+import { load, save, availableStars } from '../save.js';
+import { RESTORE_TASKS, taskCost } from '../restore.js';
 import { LEVELS } from '../core/levels.js';
 import { popup, button, iconButton, toast, enableGlow } from '../ui/widgets.js';
 
@@ -129,7 +130,21 @@ export class MapScene extends Phaser.Scene {
     const coin = this.add.image(W / 2 - 180, 80, 'ico_coin').setScale(0.42).setScrollFactor(0);
     this.coinText = this.add.text(coin.x + 50, 80, `${d.coins}`, TXT.mid).setOrigin(0, 0.5).setScrollFactor(0);
     const star = this.add.image(W / 2 + 110, 80, 'star_small_on').setScale(1.1).setScrollFactor(0);
-    this.add.text(star.x + 46, 80, `${totalStars()}`, TXT.mid).setOrigin(0, 0.5).setScrollFactor(0);
+    this.add.text(star.x + 46, 80, `${availableStars()}`, TXT.mid).setOrigin(0, 0.5).setScrollFactor(0);
+    // 바다 복원 버튼 (오른쪽 아래 고정). 별로 할 수 있는 과제가 있으면 빨간 알림 + 통통
+    const reef = iconButton(this, W - 120, H - 190, 'ico_reef', () => {
+      this.cameras.main.fadeOut(220, 189, 235, 255);
+      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Reef'));
+    }, { size: 160 }).setScrollFactor(0).setDepth(30);
+    this.add.text(W - 120, H - 85, t('restoreTitle'), { ...TXT.small, fontSize: '28px', strokeThickness: 7 }).setOrigin(0.5).setScrollFactor(0).setDepth(30);
+    const maxW = Math.min(10, Math.ceil(Math.min(d.unlocked, 100) / 10));
+    let canDo = false;
+    for (let w = 1; w <= maxW; w++) { const n = d.restore[w] || 0; if (n < RESTORE_TASKS && availableStars() >= taskCost(w, n)) canDo = true; }
+    if (canDo) {
+      const dot = this.add.circle(W - 65, H - 245, 24, 0xFF3B4A).setStrokeStyle(5, 0xffffff).setScrollFactor(0).setDepth(31);
+      this.add.text(dot.x, dot.y - 2, '!', { ...TXT.small, fontSize: '32px', strokeThickness: 0 }).setOrigin(0.5).setScrollFactor(0).setDepth(32);
+      this.tweens.add({ targets: reef, y: reef.y - 16, yoyo: true, repeat: -1, duration: 450, ease: 'Sine.InOut' });
+    }
 
     // 스크롤
     const focus = nodePos(Math.min(d.unlocked, LEVELS.length));
