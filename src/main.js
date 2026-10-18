@@ -38,6 +38,8 @@ async function start() {
 // 홈 화면 추가(앱 설치): 크롬·삼성 인터넷은 설치 창을 띄울 수 있게 이벤트를 보관해 둔다
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); window.__installPrompt = e; });
 window.addEventListener('appinstalled', () => { window.__installPrompt = null; window.__installed = true; });
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+// One a Day 앱 안에서 실행될 때(iframe)는 앱이 캐시를 관리하므로 게임 자체 서비스 워커는 쓰지 않음
+const embedded = window.parent !== window;
+if (!embedded && 'serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 start();
